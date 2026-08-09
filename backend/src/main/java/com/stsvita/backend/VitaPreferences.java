@@ -6,13 +6,19 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Preferences stored under ux0:data/stsvita/preferences/, one file per name,
- * in the same java.util.Properties-XML format libGDX's desktop backend
- * writes — so a PC "preferences" folder (unlocks, settings, seen cards) can
- * be copied onto the Vita as-is.
+ * In-memory only, and deliberately so: nothing the game persists comes
+ * through here.
  *
- * Serialization uses a small writer/parser because TeaVM lacks
- * java.util.Properties XML.
+ * StS keeps unlocks, stats and settings in its own JSON files under
+ * ux0:data/stsvita/preferences/, written by SaveHelper/Prefs via
+ * Gdx.files.local(), plain file IO that VitaFileHandle already serves. The
+ * libGDX Preferences interface is only reached from
+ * CardCrawlGame.migrateHelper/saveMigration, the one-time migration off the
+ * old Properties-XML preferences, which finds nothing to migrate on a Vita.
+ *
+ * So implementing this class would not move any progress; a PC "preferences"
+ * folder is copied across as-is (see tools/import_progress.py). Kept as a
+ * conforming no-op so the migration path and any future caller cannot NPE.
  */
 public class VitaPreferences implements Preferences {
 
@@ -21,11 +27,6 @@ public class VitaPreferences implements Preferences {
 
     public VitaPreferences(String name) {
         this.name = name;
-        load();
-    }
-
-    private void load() {
-        // Parse DATA/preferences/<name> if present.
     }
 
     @Override
@@ -141,7 +142,7 @@ public class VitaPreferences implements Preferences {
 
     @Override
     public void flush() {
-        // Write DATA/preferences/<name> atomically (temp + rename).
-        Gdx.app.debug("VitaPreferences", "flush(" + name + ") not yet persisted");
+        // Nothing to write: real progress is flushed by Prefs, not by this.
+        Gdx.app.debug("VitaPreferences", "flush(" + name + ") ignored");
     }
 }

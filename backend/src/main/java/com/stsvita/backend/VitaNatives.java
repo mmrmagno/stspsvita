@@ -62,7 +62,7 @@ public final class VitaNatives {
     public static native long uploadFrameStats();
 
     /** Read-only guard preview: would a texture of this byte size be admitted
-     * right now? Lets VitaFileHandle skip the SD read of a doomed .dds. */
+     * right now? Lets VitaFileHandle skip the SD read of a doomed.dds. */
     @Import(name = "stsv_tex_would_fit")
     public static native int texWouldFit(int need);
 
@@ -73,6 +73,17 @@ public final class VitaNatives {
     public static void texNotePath(String path) {
         byte[] utf8 = path.getBytes();
         nTexNotePath(org.teavm.interop.Address.ofData(utf8), utf8.length);
+    }
+
+    @Import(name = "stsv_transition_diag")
+    private static native void nTransitionDiag(org.teavm.interop.Address utf8, int len);
+
+    /** Crash-safe Act-transition marker with native pool/heap context. */
+    public static void transitionDiag(String label) {
+        // Preserve the ordinary INFO context before the native stderr marker.
+        System.out.flush();
+        byte[] utf8 = label.getBytes();
+        nTransitionDiag(org.teavm.interop.Address.ofData(utf8), utf8.length);
     }
 
     /* --- on-screen keyboard (glue/ime_glue.c; host stubs report failure) --- */
@@ -114,7 +125,12 @@ public final class VitaNatives {
            direct sceClibPrintf hook is worth it) --- */
 
     public static void log(String line) {
-        System.out.println(line);
+        // Native stdout batches ordinary game INFO lines to avoid synchronous
+        // ux0 writes in listener.render(). A diagnostic is an evidence
+        // boundary: flush the preceding game context, then write it through
+        // unbuffered stderr so it survives an abort/core-producing crash.
+        System.out.flush();
+        System.err.println(line);
     }
 
     public static void exitProcess(int code) {

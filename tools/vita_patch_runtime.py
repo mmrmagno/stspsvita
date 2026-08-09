@@ -3,7 +3,7 @@
 
 TeaVM 0.15.0's C runtime carries homebrew-console paths behind `#if TEAVM_PSP`
 (malloc heap instead of mmap, setjmp fibers, mktime instead of timegm,
-sceKernelLibcTime clock). The Vita needs the
+sceKernelLibcTime clock) — see teavm-patches/README.md. The Vita needs the
 exact same paths, so this activates them whenever TEAVM_VITA is defined (the
 CMake build passes -DTEAVM_VITA=1) and fixes the handful of PSP-only APIs that
 differ on the Vita (the pspkernel.h include -> psp2 threadmgr).
@@ -86,7 +86,7 @@ def patch_uchar(path: Path) -> bool:
 
 MBPATH_HELPER = '''
 /* STSVITA: TeaVM's C VFS treats any path not starting with '/' as relative and
- * prepends getcwd(), which mangles Vita "drive:" paths (ux0:, app0:, ...) into
+ * prepends getcwd(), which mangles Vita "drive:" paths (ux0:, app0:,...) into
  * invalid doubled paths like "ux0:/data/stsvita/ux0:data/.../foo". Recover the
  * intended path by cutting back to the LAST drive prefix; genuinely cwd-
  * relative paths (one drive colon, at the front) are left unchanged. */
@@ -232,6 +232,7 @@ def patch_array_data_offset(path: Path) -> bool:
     objectSize already use the constant align(sizeof(TeaVM_Array), itemSize)
     offset, so the fixed offset is the consistent form. Reproduced and
     verified with the scratchpad 32-bit host probe (pre/post System.gc).
+    Upstream-worthy TeaVM fix (M5).
     """
     text = path.read_text()
     sentinel = "/* STSVITA: fixed array data offset */"
@@ -266,8 +267,7 @@ def patch_reflection_data_offset(path: Path) -> bool:
 def patch_dropdown_guard(path: Path) -> bool:
     """Null-guard DropdownMenu.setSelectedIndex against an empty dropdown.
 
-    Opening the in-run settings screen on the Vita NPEs here (2026-07-12
-    log): the resolution dropdown's selectionBox is null, which per the
+    Opening the in-run settings screen on the Vita NPEs here: the resolution dropdown's selectionBox is null, which per the
     ctor's bytecode means it was constructed with an EMPTY labels list —
     the display-options enumeration produced nothing for the Vita's single
     non-standard 960x544 mode on some path. Selecting a resolution is
@@ -340,6 +340,7 @@ def patch_gc_timing(path: Path) -> bool:
     exhaustion (free ~0 before), fragmentation (free large but req large),
     and shrink-policy tightness (avail small). req is stale for explicit
     System.gc() calls (only alloc-triggered GCs set it).
+    Strip with the rest of the diagnostics for release (M5).
     """
     text = path.read_text()
     if "STSVITA: gc pause timing" in text:

@@ -83,7 +83,7 @@ static int stsv_ogg_seek(void *ds, ogg_int64_t off, int whence) {
 static long stsv_ogg_tell(void *ds) { return (long) ((stsv_ogg_mem *) ds)->pos; }
 
 /* Minimal RIFF/WAVE PCM16 loader: a handful of StS UI SFX
- * (SOTE_SFX_UIHover/UIClick) are .wav, not .ogg. Returns AL buffer or 0. */
+ * (SOTE_SFX_UIHover/UIClick) are.wav, not.ogg. Returns AL buffer or 0. */
 static int stsv_load_wav(const unsigned char *d, int len) {
     if (len < 44 || memcmp(d, "RIFF", 4) != 0 || memcmp(d + 8, "WAVE", 4) != 0) {
         return 0;
@@ -132,7 +132,7 @@ static int stsv_load_wav(const unsigned char *d, int len) {
     return (int) buffer;
 }
 
-/* Decode a whole .ogg (encoded bytes at data/len) into a new AL buffer. Returns
+/* Decode a whole.ogg (encoded bytes at data/len) into a new AL buffer. Returns
  * the buffer name (>0) or 0 on failure. Used for short SFX. */
 int stsv_sound_load(const void *data, int len) {
     if (!g_ready || data == NULL || len <= 0) {
@@ -158,9 +158,24 @@ int stsv_sound_load(const void *data, int len) {
     ALenum format = (vi->channels == 1) ? AL_FORMAT_MONO16 : AL_FORMAT_STEREO16;
     ALsizei rate = (ALsizei) vi->rate;
 
+    /* Exact-size allocation: the doubling-realloc chain peaked
+     * at ~2x the decoded size in one contiguous block, and an 8s stereo SFX
+     * (STS_UnlockScreen_v1) hit a fragmented-heap moment and failed silently
+     * ([audio] newSound FAILED with no ov_open error). Memory callbacks are
+     * seekable, so ov_pcm_total is available; fall back to the grow loop if
+     * it is not. */
     size_t cap = 1u << 16, size = 0;
+    ogg_int64_t total_pcm = ov_pcm_total(&vf, -1);
+    if (total_pcm > 0) {
+        cap = (size_t) total_pcm * (size_t) vi->channels * 2 + 4096;
+    }
     char *pcm = (char *) malloc(cap);
-    if (pcm == NULL) { ov_clear(&vf); return 0; }
+    if (pcm == NULL) {
+        fprintf(stderr, "[audio] sound pcm malloc FAILED (%u bytes)\n",
+                (unsigned) cap);
+        ov_clear(&vf);
+        return 0;
+    }
     int bitstream;
     for (;;) {
         if (size + 4096 > cap) {

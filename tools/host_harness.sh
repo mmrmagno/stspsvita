@@ -2,7 +2,6 @@
 # Build and run the desktop-C debugging harness: the transpiled game running
 # natively on the build machine (headless glue), for debugging fibers/GC/
 # gson/file-IO before touching Vita hardware.
-#
 # Prereqs: `make assets` and `make transpile` have been run.
 # Usage: tools/host_harness.sh [--run-only]
 set -e

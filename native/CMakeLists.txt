@@ -1,9 +1,9 @@
 ## VPK build: TeaVM-generated C + glue -> eboot.bin -> STSVITA.vpk
 ##
 ## Usage (driven by the top-level Makefile):
-##   cmake -S native -B build/native \
-##         -DCMAKE_TOOLCHAIN_FILE=$VITASDK/share/vita.toolchain.cmake \
-##         -DGENERATED_C=work/generated_c -DASSETS=work/assets_vita
+## cmake -S native -B build/native \
+## -DCMAKE_TOOLCHAIN_FILE=$VITASDK/share/vita.toolchain.cmake \
+## -DGENERATED_C=work/generated_c -DASSETS=work/assets_vita
 cmake_minimum_required(VERSION 3.16)
 
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE AND DEFINED ENV{VITASDK})
@@ -73,7 +73,7 @@ target_compile_options(${PROJECT_NAME} PRIVATE
   -std=gnu11 -D_GNU_SOURCE
   # SHELL: keeps each "-include <file>" pair intact — without it CMake
   # de-duplicates the repeated -include flag and turns the second header into
-  # a stray input file ("cannot specify -o with -c ... with multiple files").
+  # a stray input file ("cannot specify -o with -c... with multiple files").
   "SHELL:-include ${GENERATED_C}/uchar.h"
   "SHELL:-include ${GENERATED_C}/classes/java/lang/Class.h"
   # TeaVM's generated C leans on pre-C23 implicit conversions that arm gcc 15
@@ -86,7 +86,12 @@ target_compile_options(${PROJECT_NAME} PRIVATE
 # Suppress vitaGL's built-in spinning logo. The no-op wrapper lives in
 # gl_glue.c; the project renders its own loading frame immediately after init.
 target_link_options(${PROJECT_NAME} PRIVATE
-  "SHELL:-Wl,--wrap=invoke_splashscreen")
+  "SHELL:-Wl,--wrap=invoke_splashscreen"
+  # Diagnostic-only interception: vitaGL's custom-shader draw path does not
+  # check vgl_reserve_data_pool before memcpy. Keep the original behavior but
+  # report invalid fallback results and the first City draw sizes first.
+  "SHELL:-Wl,--wrap=vgl_reserve_data_pool"
+  "SHELL:-Wl,--wrap=glDrawElements")
 
 target_link_libraries(${PROJECT_NAME}
   vitaGL vitashark SceShaccCgExt mathneon SceShaccCg_stub
@@ -102,9 +107,9 @@ target_link_libraries(${PROJECT_NAME}
   SceCommonDialog_stub SceDisplay_stub SceGxm_stub SceSysmodule_stub
   SceKernelDmacMgr_stub
   # Runtime/startup sce modules the C runtime + main.c call into:
-  #   ScePower (clocks), SceKernelThreadMgr (sceKernelDelayThread/fibers),
-  #   SceProcessmgr (sceKernelLibcTime), SceLibKernel (exit, clib),
-  #   SceIofilemgr (newlib file IO -> sceIo).
+  # ScePower (clocks), SceKernelThreadMgr (sceKernelDelayThread/fibers),
+  # SceProcessmgr (sceKernelLibcTime), SceLibKernel (exit, clib),
+  # SceIofilemgr (newlib file IO -> sceIo).
   ScePower_stub SceKernelThreadMgr_stub SceProcessmgr_stub
   SceLibKernel_stub SceIofilemgr_stub
   # SceRtc: wall-clock in the [hitch] logger (suspend vs real stall).
@@ -113,10 +118,10 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 # Two VPK flavours share one eboot:
-#   BUNDLE_ASSETS=ON  (default) -> full VPK, assets packed at app0:/assets
-#   BUNDLE_ASSETS=OFF           -> slim ~7MB dev VPK; the game then reads assets
-#                                  from ux0:data/stsvita/assets (VitaFiles auto-
-#                                  detects), so reinstalling code is seconds.
+# BUNDLE_ASSETS=ON (default) -> full VPK, assets packed at app0:/assets
+# BUNDLE_ASSETS=OFF -> slim ~7MB dev VPK; the game then reads assets
+# from ux0:data/stsvita/assets (VitaFiles auto-
+# detects), so reinstalling code is seconds.
 option(BUNDLE_ASSETS "Pack the asset payload into the VPK" ON)
 
 set(VPK_FILES)

@@ -14,6 +14,9 @@ import org.teavm.vm.TeaVMOptimizationLevel;
  * Classpath shadowing does the surgery: stub classes (steamworks4j, discord,
  * twitch, JNA) come first, then the Vita backend, then the user's jar, so the
  * desktop-only code inside the jar is never reachable and gets tree-shaken.
+ *
+ * Milestone M2. The TeaVM tooling API calls below are written against 0.15.0
+ * and will be exercised/corrected when the transpile milestone starts.
  */
 public final class BuildVita {
 
@@ -42,7 +45,7 @@ public final class BuildVita {
         // texture memory (desktop GL keeps it in the driver); on Vita the
         // decoded pixmaps + stb decode buffers + FreeType share the newlib
         // heap. The old 192MB floor was measured WITH 16MB RGBA pixmap
-        // transients inflating the working set; the .dds pipeline removed
+        // transients inflating the working set; the M4.dds pipeline removed
         // those (peak live pixmaps ~9MB on device now), so the Java floor
         // dropped and we can hand the freed budget to native FreeType, which
         // OOM'd (FT error 64) with only ~88MB native under the 192MB split.
@@ -50,12 +53,21 @@ public final class BuildVita {
         // min == max: TEAVM_PSP's virtualAlloc is a plain malloc of maxHeap at
         // boot (newlib has no mmap), so a smaller min saves NOTHING natively —
         // it only lets the GC's shrink policy park the logical heap at 64MB.
-        // Device logs showed exactly that (avail 65536KB all
+        // The 2026-07-12 device log showed exactly that (avail 65536KB all
         // session, free ~0.5MB before each young pause, one pause every couple
         // frames in combat). Pinning the heap at 144MB triples the young-GC
         // allocation runway for free.
-        tool.setMinHeapSize(144 * 1024 * 1024);
-        tool.setMaxHeapSize(144 * 1024 * 1024);
+        // 112MB: the 2026-07-16/17 device logs show live Java of
+        // ~16MB after full GC plus ~9.5MB peak pixmap transients, so 112MB
+        // still leaves >4x peak-live runway. The 32MB given back shrinks
+        // newlib in lockstep (272->240, main.c) so the NATIVE budget is
+        // unchanged at 128MB (FreeType FT-64 history) and vitaGL's RAM texture
+        // pool grows 45->77MB. That pool headroom is what fixes the mid-run
+        // texture drops (shop rug/merchantHand skip-drops at pool maxfree
+        // <1MB, spill budget 6110/6144KB consumed at boot) and re-admits the
+        // five half-data City layers after an Act 1 run.
+        tool.setMinHeapSize(112 * 1024 * 1024);
+        tool.setMaxHeapSize(112 * 1024 * 1024);
         tool.getTransformers().add(ClasslibShims.class.getName());
 
         // The game jar rides in via the classloader below; stubs/backend are

@@ -25,8 +25,8 @@ import java.util.Map;
  */
 public class VitaFileHandle extends FileHandle {
 
-    // Per-frame IO attribution: single-read logging misses long tails of
-    // sub-100ms reads/stats during stalls.
+    // Per-frame IO attribution: the [io] >=100ms line missed
+    // ~36s of the 50s save-slot stall (long tail of sub-100ms reads/stats).
     // Every read and every stat-ish call accumulates here; the [hitch] logger
     // drains once per frame. Packed like the native accumulators:
     // ms*1000 + count (count capped 999).
@@ -35,6 +35,23 @@ public class VitaFileHandle extends FileHandle {
     private static long statUs;
     private static int statCount;
     private static final Map<String, byte[]> doomedDdsHeaders = new HashMap<>();
+
+    // Read-back cache for image payloads. StS loads several
+    // textures with new-Texture-per-view + dispose-on-close semantics
+    // (SingleRelicViewPopup's relicFrame*.png, single-card portraits, monster
+    // atlases re-read after every "Disposed Texture"). On desktop that's a
+    // sub-ms page-cache hit; on the Vita each is a 100-250ms SD read on the
+    // render thread — the measured cause of relic-view/deck-browse frame
+    // drops and room-load variance. Images on device never change, so serve
+    // repeats from RAM: LRU by access order, byte budget sized well inside
+    // the 112MB Java heap (~16-26MB live), per-file cap so one-time boot
+    // atlases (2-4MB) don't churn the hot set. Callers treat the returned
+    // array as read-only decode input; the cache shares the array.
+    private static final int IMAGE_CACHE_BUDGET = 20 * 1024 * 1024;
+    private static final int IMAGE_CACHE_FILE_MAX = 1024 * 1024 + 128;
+    private static int imageCacheBytes;
+    private static final java.util.LinkedHashMap<String, byte[]> imageCache =
+            new java.util.LinkedHashMap<String, byte[]>(64, 0.75f, true);
 
     public static long drainIoStats() {
         long packed = (ioUs / 1000L) * 1000L + Math.min(ioCount, 999);
@@ -98,7 +115,8 @@ public class VitaFileHandle extends FileHandle {
     @Override
     public byte[] readBytes() {
         String p = path();
-        if (p.endsWith(".png") || p.endsWith(".jpg") || p.endsWith(".dds")) {
+        boolean image = p.endsWith(".png") || p.endsWith(".jpg") || p.endsWith(".dds");
+        if (image) {
             // Loads are synchronous (read -> decode -> upload on one thread),
             // so this names the texture in the [DIAG dxt] SKIP/SPILL lines.
             VitaNatives.texNotePath(p);
@@ -106,9 +124,13 @@ public class VitaFileHandle extends FileHandle {
             if (headerOnly != null) {
                 return headerOnly;
             }
+            byte[] cached = imageCache.get(p);
+            if (cached != null) {
+                return cached;
+            }
         }
-        // Synchronous multi-MB SD reads (music, event art) can stall the
-        // frame loop under cooperative fibers.
+        // Freeze diagnostic: synchronous multi-MB SD reads
+        // (music, event art) stall the frame loop under cooperative fibers.
         long t0 = System.nanoTime();
         byte[] bytes = readAll(read(), (int) length());
         long us = (System.nanoTime() - t0) / 1000L;
@@ -118,12 +140,22 @@ public class VitaFileHandle extends FileHandle {
             System.out.println("[io] read " + path() + " " + bytes.length
                     + "B in " + (us / 1000L) + "ms");
         }
+        if (image && bytes.length <= IMAGE_CACHE_FILE_MAX) {
+            imageCacheBytes += bytes.length;
+            imageCache.put(p, bytes);
+            java.util.Iterator<Map.Entry<String, byte[]>> it =
+                    imageCache.entrySet().iterator();
+            while (imageCacheBytes > IMAGE_CACHE_BUDGET && it.hasNext()) {
+                imageCacheBytes -= it.next().getValue().length;
+                it.remove();
+            }
+        }
         return bytes;
     }
 
     /**
-     * Don't load what the guard will drop: when no vitaGL pool (nor the
-     * bounded spill) can admit a texture of this size, the
+     * Don't load what the guard will drop: when no vitaGL
+     * pool (nor the bounded spill) can admit a texture of this size, the
      * upload path blanks it to 4x4 AFTER the multi-second SD read — pure
      * waste (17MB of char-select shoulders alone). Ask the guard first; if
      * doomed, return just the 128-byte DDS header. Its dimensions keep the
@@ -372,7 +404,8 @@ public class VitaFileHandle extends FileHandle {
             // Exact-size fast path: the estimate is the stat'd file length, so
             // read straight into the result array. The old BAOS route (chunk
             // buffer + growth doublings + toByteArray copy) allocated 2-3x the
-            // file size in garbage.
+            // file size in garbage — its 256KB/4MB allocations were the main
+            // young-GC triggers in the device log ([gc] req=).
             if (estimatedSize > 0) {
                 byte[] out = new byte[estimatedSize];
                 int total = 0;

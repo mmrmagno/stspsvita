@@ -29,8 +29,8 @@ public final class AsyncSaver {
         } catch (IOException e) {
             System.out.println("ERROR AsyncSaver> failed to save " + filepath + ": " + e);
         }
-        // Saves run synchronously under cooperative fibers, so a slow flush
-        // stalls the frame loop.
+        // Freeze diagnostic: saves run synchronously under
+        // cooperative fibers, so a slow flush stalls the frame loop.
         long ms = (System.nanoTime() - t0) / 1000000L;
         System.out.println("[save] write " + filepath + " " + data.length()
                 + " chars in " + ms + "ms");

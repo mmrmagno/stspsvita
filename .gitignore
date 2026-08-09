@@ -9,6 +9,11 @@ out/
 *.vpk
 *.log
 
+# Local crash/core dumps.
+crash-artifacts/
+# Progress backups written by tools/import_progress.py contain player saves.
+progress-backups/
+
 # Gradle / Java
 .gradle/
 transpiler/build/

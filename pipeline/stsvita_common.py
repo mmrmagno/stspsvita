@@ -47,14 +47,17 @@ DEFAULT_LANGS = "eng"
 
 
 def find_jar(sts_dir: Path) -> Path:
-    jar = sts_dir / JAR_NAME
+    # The public build interface accepts either the installation directory or
+    # the jar itself. Keeping this normalization here means verify/extract and
+    # every Make-based entry point resolve the exact same input.
+    jar = sts_dir if sts_dir.is_file() else sts_dir / JAR_NAME
     if not jar.is_file():
         sys.exit(
             f"error: {jar} not found.\n"
-            f"Point STS_DIR at your Slay the Spire install "
-            f"(the folder containing {JAR_NAME})."
+            f"Point the build at your Slay the Spire install directory "
+            f"(the folder containing {JAR_NAME}) or at {JAR_NAME} itself."
         )
-    return jar
+    return jar.resolve()
 
 
 def sha256_file(path: Path) -> str:

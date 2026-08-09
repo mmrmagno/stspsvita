@@ -1,69 +1,64 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 cd "$ROOT"
 
-STS_DIR="${STS_DIR:-$ROOT/game}"
-LANGS="${LANGS:-eng}"
-AUDIO_KBPS="${AUDIO_KBPS:-0}"
-MODE="${BUILD_MODE:-slim}"
-CLEAN=0
+STS_INPUT=
+LANGS=eng
+AUDIO_KBPS=32
+INCREMENTAL=0
+ALLOW_UNSUPPORTED=0
 
 usage() {
-    cat <<'USAGE'
-Usage: ./build.sh [options]
+    cat <<'EOF'
+Usage: ./build.sh --sts-dir <install-dir> [options]
+       ./build.sh --sts-jar <desktop-1.0.jar> [options]
+
+Build a clean, validated full VPK, slim VPK, external asset tree, and manifest.
 
 Options:
-  --sts-dir PATH      Folder containing desktop-1.0.jar
-  --langs LIST        Comma-separated languages to keep, default: eng
-  --audio-kbps N      Re-encode OGG audio at N kbps, default: 0 (copy)
-  --slim              Build code-only VPK plus external assets, default
-  --full              Bundle assets into the VPK
-  --clean             Remove previous generated output before building
-  -h, --help          Show this help
-
-Environment variables are also supported:
-  STS_DIR, LANGS, AUDIO_KBPS, BUILD_MODE
-USAGE
+  --langs <list>       Comma-separated game languages to retain (default: eng)
+  --audio-kbps <rate>  Re-encode OGG audio (default: 32 at 24kHz; 48 for higher fidelity; 0 copies unchanged)
+  --incremental        Reuse assets/generated C and rebuild only the slim VPK
+  --allow-unsupported-input
+                       Contributor-only override for an unknown jar fingerprint
+  -h, --help           Show this help
+EOF
 }
 
 die() {
-    echo "error: $*" >&2
+    printf 'error: %s\n' "$*" >&2
     exit 2
 }
 
 need_command() {
-    command -v "$1" >/dev/null 2>&1 || die "$1 not found on PATH"
+    command -v "$1" >/dev/null 2>&1 || die "$2"
 }
 
-while [[ $# -gt 0 ]]; do
+while (($#)); do
     case "$1" in
-        --sts-dir)
-            [[ $# -ge 2 ]] || die "--sts-dir needs a path"
-            STS_DIR="$2"
+        --sts-dir|--sts-jar)
+            (($# >= 2)) || die "$1 needs a path"
+            STS_INPUT=$2
             shift 2
             ;;
         --langs)
-            [[ $# -ge 2 ]] || die "--langs needs a value"
-            LANGS="$2"
+            (($# >= 2)) || die "--langs needs a comma-separated list"
+            LANGS=$2
             shift 2
             ;;
         --audio-kbps)
-            [[ $# -ge 2 ]] || die "--audio-kbps needs a value"
-            AUDIO_KBPS="$2"
+            (($# >= 2)) || die "--audio-kbps needs a non-negative integer"
+            AUDIO_KBPS=$2
             shift 2
             ;;
-        --slim)
-            MODE="slim"
+        --incremental)
+            INCREMENTAL=1
             shift
             ;;
-        --full)
-            MODE="full"
-            shift
-            ;;
-        --clean)
-            CLEAN=1
+        --allow-unsupported-input)
+            ALLOW_UNSUPPORTED=1
             shift
             ;;
         -h|--help)
@@ -71,61 +66,51 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         *)
-            die "unknown option: $1"
+            die "unknown option: $1 (use --help)"
             ;;
     esac
 done
 
-[[ "$MODE" == "slim" || "$MODE" == "full" ]] || die "BUILD_MODE must be slim or full"
-[[ -f "$STS_DIR/desktop-1.0.jar" ]] || die "$STS_DIR/desktop-1.0.jar not found"
-[[ -n "${VITASDK:-}" ]] || die "VITASDK is not set"
+[[ -n "$STS_INPUT" ]] || die "provide --sts-dir or --sts-jar"
+[[ "$AUDIO_KBPS" =~ ^[0-9]+$ ]] || die "--audio-kbps must be a non-negative integer"
 
-need_command python3
-need_command gcc
-need_command gradle
-need_command cmake
-need_command make
-need_command java
-if ! command -v magick >/dev/null 2>&1 && ! command -v convert >/dev/null 2>&1; then
-    die "ImageMagick not found on PATH (need magick or convert)"
+# Common VitaSDK installs live here; an explicit VITASDK always wins.
+if [[ -z "${VITASDK:-}" && -f "$HOME/vitasdk/share/vita.toolchain.cmake" ]]; then
+    export VITASDK="$HOME/vitasdk"
+fi
+[[ -n "${VITASDK:-}" ]] || die "VITASDK is not set; install VitaSDK from https://vitasdk.org"
+[[ -f "$VITASDK/share/vita.toolchain.cmake" ]] || die "VitaSDK CMake toolchain not found under $VITASDK"
+export PATH="$VITASDK/bin:$PATH"
+
+need_command make "GNU Make is required"
+need_command python3 "Python 3.9 or newer is required"
+need_command java "JDK 17 or newer is required"
+need_command gradle "Gradle is required"
+need_command cmake "CMake 3.16 or newer is required"
+need_command magick "ImageMagick 7 ('magick') is required"
+need_command arm-vita-eabi-gcc "VitaSDK compiler arm-vita-eabi-gcc was not found"
+if ((AUDIO_KBPS > 0)); then
+    need_command ffmpeg "ffmpeg is required when --audio-kbps is nonzero"
 fi
 
-if [[ "$AUDIO_KBPS" != "0" ]]; then
-    need_command ffmpeg
+python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 9))' || \
+    die "Python 3.9 or newer is required"
+JAVA_MAJOR=$(java -version 2>&1 | sed -n '1s/.*version "\([0-9][0-9]*\).*/\1/p')
+[[ -n "$JAVA_MAJOR" && "$JAVA_MAJOR" -ge 17 ]] || die "JDK 17 or newer is required"
+gradle --version >/dev/null || die "Gradle is installed but could not start"
+cmake --version >/dev/null || die "CMake is installed but could not start"
+magick -version >/dev/null || die "ImageMagick is installed but could not start"
+arm-vita-eabi-gcc --version >/dev/null || die "VitaSDK compiler could not start"
+
+MAKE_ARGS=("STS_DIR=$STS_INPUT" "LANGS=$LANGS" "AUDIO_KBPS=$AUDIO_KBPS")
+if ((ALLOW_UNSUPPORTED)); then
+    MAKE_ARGS+=("ALLOW_UNSUPPORTED=1")
 fi
 
-target="vpk-slim"
-vpk="build/STSVITA-slim.vpk"
-if [[ "$MODE" == "full" ]]; then
-    target="vpk"
-    vpk="build/STSVITA.vpk"
-fi
-
-if [[ "$CLEAN" == "1" ]]; then
-    make clean
-fi
-
-echo "Build mode: $MODE"
-echo "Pipeline: verify -> extract -> assets -> livearea -> transpile -> native"
-echo "Command: make $target STS_DIR=$STS_DIR LANGS=$LANGS AUDIO_KBPS=$AUDIO_KBPS"
-echo
-
-make "$target" STS_DIR="$STS_DIR" LANGS="$LANGS" AUDIO_KBPS="$AUDIO_KBPS"
-
-[[ -f "$vpk" ]] || die "build completed without producing $vpk"
-[[ -d work/assets_vita ]] || die "build completed without producing work/assets_vita"
-
-asset_count="$(find work/assets_vita -type f | wc -l | tr -d '[:space:]')"
-dds_count="$(find work/assets_vita -type f -name '*.dds' | wc -l | tr -d '[:space:]')"
-fallback_count="$(find work/assets_vita -type f \( -name '*.png' -o -name '*.jpg' \) | wc -l | tr -d '[:space:]')"
-audio_count="$(find work/assets_vita -type f \( -name '*.ogg' -o -name '*.wav' \) | wc -l | tr -d '[:space:]')"
-
-echo
-echo "Build complete."
-echo "VPK: $vpk"
-echo "Assets: work/assets_vita ($asset_count files)"
-echo "Textures: $dds_count DDS, $fallback_count PNG/JPG fallbacks"
-echo "Audio: $audio_count OGG/WAV files"
-if [[ "$MODE" == "slim" ]]; then
-    echo "Copy work/assets_vita contents to ux0:data/stsvita/assets/ on the Vita."
+if ((INCREMENTAL)); then
+    make incremental-slim "${MAKE_ARGS[@]}"
+else
+    # Session logs are intentionally preserved by clean-build.
+    make clean-build
+    make release "${MAKE_ARGS[@]}"
 fi

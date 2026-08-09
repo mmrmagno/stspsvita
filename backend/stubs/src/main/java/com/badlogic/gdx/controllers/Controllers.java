@@ -5,6 +5,8 @@ import com.badlogic.gdx.utils.Array;
 /**
  * Shadow of gdx-controllers' Controllers: the real class discovers a
  * platform ControllerManager via Class.forName — a dead end under AOT.
+ * M3 registers the Vita gamepad here as a virtual Controller so the game's
+ * existing controller mode drives everything.
  */
 public final class Controllers {
 

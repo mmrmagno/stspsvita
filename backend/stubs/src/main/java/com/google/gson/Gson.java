@@ -269,7 +269,7 @@ public class Gson {
         // form ran a setjmp/longjmp round-trip (plus an exception allocation)
         // per missing field per superclass level — the hottest exception path
         // in the port, and the site of a rare on-device crash (a null Class
-        // reached getSuperclass after the longjmp; Act-2 dump 2026-07-11).
+        // reached getSuperclass after the longjmp;).
         for (Class<?> c = cls; c != null && c != Object.class; c = c.getSuperclass()) {
             for (Field f : c.getDeclaredFields()) {
                 if (f.getName().equals(name)) {
@@ -318,8 +318,8 @@ public class Gson {
         long t0 = System.nanoTime();
         StringBuilder sb = new StringBuilder();
         write(sb, src, pretty ? 0 : -1);
-        // Reflective serialization of the whole save allocates heavily; slow
-        // passes stall the frame loop.
+        // Freeze diagnostic: reflective serialization of the
+        // whole save allocates heavily; slow passes stall the frame loop.
         long ms = (System.nanoTime() - t0) / 1000000L;
         if (ms >= 30) {
             System.out.println("[save] toJson "

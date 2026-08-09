@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fingerprint the user's Slay the Spire jar and sanity-check its contents.
 
-Usage: verify.py --sts-dir <install dir>
+Usage: verify.py --sts-dir <install dir or desktop-1.0.jar>
 """
 
 from __future__ import annotations
@@ -18,7 +18,10 @@ EXPECTED_MAIN = "com.megacrit.cardcrawl.desktop.DesktopLauncher"
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--sts-dir", type=Path, required=True)
+    ap.add_argument("--sts-dir", type=Path, required=True,
+                    help="game install directory or explicit desktop-1.0.jar")
+    ap.add_argument("--allow-unknown", action="store_true",
+                    help="accept a structurally valid but unsupported jar fingerprint")
     args = ap.parse_args()
 
     jar = find_jar(args.sts_dir)
@@ -60,12 +63,17 @@ def main() -> int:
         print(f"assets: {asset_bytes / 1048576:.1f} MB across "
               f"{sum(1 for n in names if is_asset(n))} files")
 
-    if digest in KNOWN_JARS:
+    known = digest in KNOWN_JARS
+    if known:
         print(f"status: KNOWN GOOD — {KNOWN_JARS[digest]}")
     else:
-        print("status: unrecognized build — probably fine (platform/storefront "
-              "variants differ); please report your fingerprint if the build "
-              "succeeds")
+        print("status: UNSUPPORTED — this exact jar fingerprint has not been "
+              "validated with STSVITA")
+        if not args.allow_unknown:
+            problems.append(
+                "unsupported jar fingerprint; use a supported V2.3.4 jar "
+                "or pass --allow-unknown only for deliberate contributor testing"
+            )
 
     if manifest and "Main-Class: " in manifest:
         main_cls = manifest.split("Main-Class: ", 1)[1].split()[0]
@@ -73,7 +81,7 @@ def main() -> int:
             problems.append(f"unexpected Main-Class {main_cls}")
 
     for p in problems:
-        print(f"WARNING: {p}")
+        print(f"ERROR: {p}")
     if problems:
         return 1
     print("verify: OK")

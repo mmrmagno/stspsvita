@@ -7,14 +7,19 @@
 #include <unistd.h>
 #include <stdio.h>
 
-/* The newlib malloc heap holds TeaVM's Java heap (144MB, committed up front
+/* The newlib malloc heap holds TeaVM's Java heap (112MB, committed up front
  * by TEAVM_PSP virtualAlloc=malloc) + native malloc (stb decode + FreeType)
  * + the free space vitaGL falls back to for PER-DRAW vertex buffers.
- * 272MB keeps most of the proven-stable 280MB arena while giving vitaGL
- * about 8MB more dedicated texture space. This compensates for the
- * full-resolution UI/chest set without repeating the unsafe 260MB experiment
- * or forcing 9MB of persistent textures into the draw-buffer heap. */
-int _newlib_heap_size_user = 272 * 1024 * 1024;
+ * 240MB: shrunk in lockstep with the Java heap (144->112MB,
+ * BuildVita.java), so the NATIVE budget is unchanged at 128MB — this is NOT
+ * a repeat of the unsafe 260MB experiment, which cut native. The 32MB of
+ * USER_RW released here goes to vglInitExtended's carved RAM texture pool
+ * (45->77MB). Device evidence for why: by
+ * Exordium floor 13 pool maxfree was <1MB and the 6MB spill was 6110KB
+ * consumed at boot, so the shop rug and merchantHand were skip-dropped and
+ * the City layers only fit as quarter-data. With the larger pool the ~6MB
+ * boot-critical UI set stays in-pool, restoring the spill valve as well. */
+int _newlib_heap_size_user = 240 * 1024 * 1024;
 
 /* TeaVM's generated main, renamed via -Dmain=stsv_java_main (CMake). */
 int stsv_java_main(int argc, char **argv);
@@ -27,6 +32,14 @@ void stsv_show_loading_screen(void);
 
 /* Opens the OpenAL device/context for VitaAudio (audio_glue.c). */
 void stsv_audio_init(void);
+
+/* Ordinary game INFO output is high-volume and used to force one ux0 memory-
+ * card write per println, directly inside listener.render(). Keep a static
+ * buffer outside newlib so logging neither fragments the draw-buffer heap nor
+ * allocates after startup. Critical Java-side and native-bridge diagnostics
+ * stay on unbuffered stderr and flush this context before reporting
+ * (VitaNatives.log). */
+static char stsv_stdout_buffer[16 * 1024];
 
 int main(int argc, char **argv) {
     /* The port is developed/tested at max clocks (PSVshell equivalent). */
@@ -46,14 +59,15 @@ int main(int argc, char **argv) {
      * uncaught-exception trace there right before abort()) to a file on ux0:,
      * since the Vita has no console. Both streams open in append mode (Vita
      * newlib has no dup2) so their O_APPEND writes interleave at EOF without
-     * clobbering; truncate once up front, unbuffered so it survives abort(). */
+     * clobbering; truncate once up front. Batch ordinary stdout INFO writes;
+     * stderr remains unbuffered so abort/crash diagnostics survive. */
     {
         FILE *f = fopen("ux0:data/stsvita/stsvita.log", "w");
         if (f) fclose(f);
     }
     freopen("ux0:data/stsvita/stsvita.log", "a", stdout);
     freopen("ux0:data/stsvita/stsvita.log", "a", stderr);
-    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stdout, stsv_stdout_buffer, _IOFBF, sizeof(stsv_stdout_buffer));
     setvbuf(stderr, NULL, _IONBF, 0);
 
     /* Give vitaGL large DEDICATED pools (its own memblocks) so texture
@@ -81,6 +95,9 @@ int main(int argc, char **argv) {
     stsv_audio_init();
 
     int rc = stsv_java_main(argc, argv);
+
+    /* sceKernelExitProcess does not promise stdio teardown. */
+    fflush(NULL);
 
     /* This vitaGL build exposes no vglEnd(); process teardown on
      * sceKernelExitProcess reclaims the GL context and memory pools. */

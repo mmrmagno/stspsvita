@@ -1,9 +1,8 @@
 // TeaVM AOT harness: compiles the Vita backend + launcher against the API of
 // the user's own jar, then (task `transpile`) runs TeaVM's C backend over
 // stubs -> backend -> user jar to emit work/generated_c/.
-//
 // The user's jar never leaves the machine and nothing derived from it is
-// written inside the repo tree (all outputs go to ../work).
+// written inside the repo tree (all outputs go to../work).
 
 plugins {
     id 'java'
@@ -51,7 +50,8 @@ tasks.register('typeManifest', Exec) {
 compileJava.dependsOn 'typeManifest'
 processResources.dependsOn 'typeManifest'
 
-// TeaVM version is pinned because the C backend moves quickly.
+// TeaVM version is pinned: the C backend moves fast and we vendor patches
+// against exactly this release (see../teavm-patches).
 def teavmVersion = '0.15.0'
 
 dependencies {

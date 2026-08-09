@@ -36,8 +36,8 @@ VitaDB, forums, Discord, or mirrors.
 - JDK 17 or newer.
 - Gradle.
 - CMake, Make, Python 3, GCC.
-- ImageMagick, either `magick` or `convert`.
-- `ffmpeg`, optional, only when re-encoding audio.
+- ImageMagick 7, providing `magick`.
+- `ffmpeg`, required unless you build with `--audio-kbps 0`.
 
 ## Windows Setup
 
@@ -149,41 +149,56 @@ cp "/mnt/c/Program Files (x86)/Steam/steamapps/common/SlayTheSpire/desktop-1.0.j
 Build:
 
 ```sh
-./build.sh
+./build.sh --sts-dir game
 ```
 
-For a completely fresh rebuild:
-
-```sh
-./build.sh --clean
-```
-
-`build.sh` is a dependency-checking wrapper around the same Make targets used
-during development. The default command invokes:
-
-```sh
-make vpk-slim STS_DIR=game LANGS=eng AUDIO_KBPS=0
-```
-
-The Make dependency chain is:
+`build.sh` is a dependency-checking wrapper around the Make targets used during
+development. It preflights every required tool, fingerprints your jar, cleans
+the previous generated output, and runs the full validated pipeline:
 
 ```text
-verify -> extract -> assets -> livearea -> transpile -> native
+verify -> extract -> assets -> livearea -> transpile -> packages -> validate
 ```
 
-`AUDIO_KBPS=0` copies the original OGG/WAV audio without re-encoding. DDS
-generation, half-resolution texture selection, PNG/JPG fallback handling,
+You can point it at an install folder instead of copying the jar, or name the
+jar directly:
+
+```sh
+./build.sh --sts-dir "$HOME/.steam/root/steamapps/common/SlayTheSpire"
+./build.sh --sts-jar /path/to/desktop-1.0.jar
+```
+
+DDS generation, half-resolution texture selection, PNG/JPG fallback handling,
 LiveArea generation, TeaVM transpilation, Vita runtime patching, and native VPK
 packaging are all performed by this chain. When a valid DDS is generated, its
 source PNG/JPG is removed from the processed payload; images that are not good
 DDS candidates remain in their original format.
 
-Default output:
+A successful build produces four artifacts from one processed asset tree and
+one generated C tree:
 
-- `build/STSVITA-slim.vpk`
-- `work/assets_vita/`
+- `build/STSVITA.vpk`, the full package with assets bundled inside
+- `build/STSVITA-slim.vpk`, the code-only package
+- `work/assets_vita/`, the slim package's external asset payload
+- `build/build-manifest.json`, recording the input, options, tool versions,
+  asset counts, validation results, and output hashes
 
-Install `build/STSVITA-slim.vpk` with VitaShell.
+Install either VPK with VitaShell. The slim package is usually better while you
+iterate: install it once, copy the assets once, then reinstall only code.
+
+Audio is re-encoded at 32kbps/24kHz by default. Use `--audio-kbps 48` for higher
+fidelity at the source rate, or `--audio-kbps 0` to copy the originals
+untouched. `ffmpeg` is only required when the rate is nonzero.
+
+After one full build you can rebuild just the code:
+
+```sh
+./build.sh --sts-dir game --incremental
+```
+
+Incremental mode reuses `work/assets_vita/` and `work/generated_c/` and emits
+only the slim VPK. Run a full build when Java, backend, or runtime-generation
+inputs change.
 
 Always install the VPK and `work/assets_vita/` produced by the same clean
 build. After updating the port, do not reuse an older processed asset folder.
@@ -220,43 +235,181 @@ rsync -a --delete work/assets_vita/ "$VITA3K_UX0/data/stsvita/assets/"
 
 ## Build Options
 
-Use a game install folder instead of copying the jar:
+Keep extra language fonts. CJK fonts alone are about 160MB, so English-only is
+the default:
 
 ```sh
-STS_DIR="$HOME/.steam/root/steamapps/common/SlayTheSpire" ./build.sh
+./build.sh --sts-dir game --langs eng,jpn
 ```
 
-Keep extra language fonts:
+Higher-fidelity audio at the source sample rate, or no re-encode at all:
 
 ```sh
-LANGS=eng,jpn ./build.sh
+./build.sh --sts-dir game --audio-kbps 48
+./build.sh --sts-dir game --audio-kbps 0
 ```
 
-Re-encode OGG audio at a lower bitrate:
+The build refuses game versions it has not been validated against. If you are
+deliberately testing an unknown but structurally compatible jar:
 
 ```sh
-AUDIO_KBPS=96 ./build.sh
+./build.sh --sts-dir game --allow-unsupported-input
 ```
-
-Build a full VPK with assets bundled inside:
-
-```sh
-./build.sh --full
-```
-
-The full VPK is larger and slower to reinstall. The default slim VPK is usually
-better: install the VPK once, copy the assets once, and rebuild/reinstall code
-quickly after that.
 
 Run `./build.sh --help` for all script flags.
 
-## Manual Make Targets
+## Transferring PC Progress
 
-The one-command equivalents are:
+The port stores its writable game data under `ux0:data/stsvita/`, in the same
+two folders and the same file formats the PC release uses:
+
+| Folder | Contents |
+| --- | --- |
+| `saves/` | `<CHARACTER>.autosave`, the run you can Continue |
+| `preferences/` | unlocks, achievements, seen cards, relics, bosses, stats, settings |
+
+The port reads these through its own file layer, so PC bytes are Vita bytes and
+no conversion is needed. `tools/import_progress.py` copies them across safely.
+
+Close STSVITA on the Vita before importing. The game rewrites its own progress
+when it exits, which would undo the import.
+
+Game assets are never part of a progress transfer. The tool only reads `saves/`
+and `preferences/`, and only writes those two folders. Nothing under `assets/`
+is touched, and importing progress never installs or repairs a game build.
+
+### Point it at your PC install
 
 ```sh
-make vpk-slim STS_DIR=game
-make vpk STS_DIR=game
+tools/import_progress.py --auto --ftp-host <your-vita-ip>
+```
+
+`--auto` searches your Steam library folders, including libraries on other
+drives, and the usual GOG locations. If it finds more than one install it lists
+them and asks you to choose. You can always name the folder yourself:
+
+```sh
+tools/import_progress.py --source "$HOME/.steam/root/steamapps/common/SlayTheSpire" \
+  --ftp-host <your-vita-ip>
+```
+
+GOG and beta builds keep progress in `betaPreferences/` rather than
+`preferences/`. The tool detects this and folds it into the Vita's
+`preferences/` folder. Force the choice with `--source-prefs-dir betaPreferences`
+if you ever need to.
+
+### Enable VitaShell FTP
+
+On the Vita, open VitaShell and press SELECT. It shows an address such as
+`ftp://192.168.1.42:1337`. Pass the IP as `--ftp-host`. The default port is
+already `1337`, so `--ftp-port` is only needed if yours differs.
+
+You can also write to a folder instead, which is useful when you copy the SD
+card directly:
+
+```sh
+tools/import_progress.py --auto --dest-dir /run/media/you/vita/data/stsvita
+```
+
+### Preview, then apply
+
+Nothing is written without `--apply`. The default run is a preview that lists
+every file it would add or replace:
+
+```sh
+tools/import_progress.py --auto --ftp-host 192.168.1.42
+tools/import_progress.py --auto --ftp-host 192.168.1.42 --apply
+```
+
+Before writing anything, the current Vita progress is copied to
+`progress-backups/<timestamp>/` on your PC together with a checksum manifest.
+Every file written is then read back and verified by SHA-256. A failed transfer
+or a checksum mismatch stops the run and prints the rollback command.
+
+### Save slots
+
+Slay the Spire has three save slots. Slot 0 has no filename prefix; slots 1 and
+2 are prefixed `1_` and `2_`. The tool keeps them apart:
+
+- A slot the Vita does not have yet is imported.
+- A slot whose files are already byte-identical is skipped.
+- A slot that exists on the Vita with different contents is reported as a
+  conflict and left completely alone.
+
+Conflicting slots are never partially written. Importing only the differing half
+of a slot would splice PC saves onto Vita preferences and produce a run that
+neither install ever had. Overwrite deliberately:
+
+```sh
+tools/import_progress.py --auto --ftp-host 192.168.1.42 --apply --replace-slots 0,2
+tools/import_progress.py --auto --ftp-host 192.168.1.42 --apply --replace-all
+```
+
+### Undo an import
+
+Every applied import prints the exact command that reverses it:
+
+```sh
+tools/import_progress.py --ftp-host 192.168.1.42 \
+  --rollback-from progress-backups/20260809T101500Z --apply
+```
+
+A rollback also previews without `--apply`, and it refuses a backup whose files
+no longer match its manifest.
+
+### Progress Transfer Troubleshooting
+
+`no Slay the Spire install found automatically`
+
+Your install is in a non-standard path. Pass `--source <dir>`.
+
+`several installs found`
+
+Choose one with `--source`.
+
+`both preferences/ and betaPreferences/ hold progress`
+
+Pass `--source-prefs-dir` to say which one to read.
+
+`cannot reach destination`
+
+VitaShell FTP is not running, the IP is wrong, or the Vita went to sleep. Open
+VitaShell and press SELECT.
+
+Slots are reported as conflicts
+
+This is expected when both sides have been played. Use `--replace-slots` or
+`--replace-all` once you have decided which progress wins.
+
+The import applied but the Vita still shows the old run
+
+STSVITA was still running and rewrote its progress on exit. Close it, roll back,
+and import again.
+
+`checksum mismatch after write`
+
+The transfer was corrupted. Nothing is trusted after this. Roll back and retry.
+
+Files that are not recognised progress, such as `steam_autocloud.vdf`,
+symlinks, directories, and anything oversized or unknown, are skipped and
+listed by name rather than copied silently. Run history under `runs/` is not
+transferred, because the game does not need it to restore a save or an unlock.
+
+To run the tool's tests, which use synthetic fixtures and never touch game
+data:
+
+```sh
+python3 -m unittest discover -s tools -p 'test_*.py'
+```
+
+## Manual Make Targets
+
+`build.sh` is the supported interface. The Makefile stays available as the
+composable contributor and debugging interface. `make release` is the full
+pipeline that `build.sh` drives:
+
+```sh
+make release STS_DIR=game
 ```
 
 For pipeline debugging, the stages can also be run directly:
@@ -268,7 +421,12 @@ make assets STS_DIR=game
 make livearea STS_DIR=game
 make transpile
 make native BUNDLE_ASSETS=OFF
+make validate STS_DIR=game
 ```
+
+`make vpk` and `make vpk-slim` build a single package each without the
+cross-checks that `release` runs. `make test` runs the host-side tool tests,
+which need no jar, no VitaSDK and no device.
 
 `extract`, `assets`, and `livearea` declare their prerequisites, so invoking
 a later target may rerun earlier stages. Generated output is written to `work/`
@@ -276,10 +434,17 @@ and `build/`; both directories are ignored by git and must not be distributed.
 
 ## Troubleshooting
 
-`desktop-1.0.jar not found`
+`provide --sts-dir or --sts-jar`
 
-Point `STS_DIR` at the folder containing `desktop-1.0.jar`, or copy the jar to
-`game/desktop-1.0.jar`.
+`build.sh` needs to be told where the game is. Pass `--sts-dir` with the folder
+containing `desktop-1.0.jar`, or `--sts-jar` with the jar itself. If you copied
+the jar into the drop folder, that is `--sts-dir game`.
+
+The build refuses an unrecognised jar fingerprint
+
+Only validated game versions are supported. Override deliberately with
+`--allow-unsupported-input` if you are testing an unknown but structurally
+compatible jar.
 
 `VITASDK is not set`
 
@@ -333,7 +498,9 @@ or install the missing package through VitaSDK's package manager.
 | `backend/` | libGDX Vita backend and desktop-service stubs. |
 | `transpiler/` | TeaVM AOT harness and Vita launcher. |
 | `native/` | Vita C entrypoint, glue, CMake build, and packaging. |
-| `tools/` | Build helper tools, including asset FTP upload. |
+| `tools/` | Build helper tools, asset FTP upload, and PC progress import. |
+| `teavm-patches/` | TeaVM runtime patch notes for the Vita target. |
+| `docs/` | Architecture, feasibility research, and roadmap. |
 
 ## Legal
 
@@ -344,4 +511,4 @@ source repository instead.
 
 ## License
 
-MIT for this build tooling. See `LICENSE`.
+MIT for this build tooling. See [LICENSE](LICENSE) .

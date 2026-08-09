@@ -114,6 +114,10 @@ public class VitaAudio implements Audio {
         VitaNatives.log("[audio] newMusic " + file.path() + " path-stream total="
                 + totalMs + "ms"
                 + (handle == 0 ? " OPEN-FAILED" : ""));
+        if (file.path().contains("/audio/music/STS_Level2")) {
+            VitaNatives.transitionDiag("city-music-open "
+                    + (handle == 0 ? "FAILED" : "ok"));
+        }
         if (handle == 0) {
             return new SilentMusic();
         }

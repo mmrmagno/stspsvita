@@ -7,7 +7,8 @@ import com.badlogic.gdx.InputProcessor;
  * libGDX 1.9.5 Input for the Vita. Pointer-first: the front touch panel
  * (mouse in the host harness) drives the game's existing mouse path —
  * Slay the Spire is fully playable by pointer. SceCtrl buttons are exposed
- * through the Controllers stub so the game's gamepad UI mode works.
+ * for the controller layer (M3 follow-up: virtual Controller through the
+ * Controllers stub so the game's gamepad UI mode works).
  *
  * Polled once per frame by VitaApplication.mainLoop before render().
  */

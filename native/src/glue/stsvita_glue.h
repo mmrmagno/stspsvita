@@ -21,7 +21,7 @@ void stsv_tex_spill_enable(void);
 
 /* Read-only guard preview (gl_common_glue.c): would a compressed texture of
  * this byte size be admitted right now? VitaFileHandle asks before reading a
- * big .dds payload so doomed textures skip the SD read (host: always 1). */
+ * big.dds payload so doomed textures skip the SD read (host: always 1). */
 int32_t stsv_tex_would_fit(int32_t need);
 
 /* Per-frame diagnostics, ms*1000+calls, reset on read (freetype_glue /
@@ -36,6 +36,10 @@ int64_t stsv_upload_frame_stats(void);  /* glTexImage/glCompressedTexImage */
  * (gl_common_glue.c); VitaFileHandle notes every image read. utf8 need not
  * be NUL-terminated; len bytes are copied. */
 void stsv_tex_note_path(const void *utf8, int32_t len);
+
+/* Crash-safe Act-transition boundary with native memory/pool context
+ * (gl_common_glue.c). The label is UTF-8 and need not be NUL-terminated. */
+void stsv_transition_diag(const void *utf8, int32_t len);
 
 /* sceImeDialog on-screen keyboard (ime_glue.c; host stubs in host_glue.c).
  * title/initial are NUL-terminated UTF-16 (Java chars); poll() once per

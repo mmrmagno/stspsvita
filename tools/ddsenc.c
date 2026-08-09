@@ -88,16 +88,18 @@ static unsigned char *halve(const unsigned char *src, int w, int h) {
 }
 
 int main(int argc, char **argv) {
-    int force = 0, half = 0;
+    int force = 0, scale = 1;
     if (argc < 3) {
-        fprintf(stderr, "usage: ddsenc <src.png> <dst.dds> [-f] [-2]\n");
+        fprintf(stderr, "usage: ddsenc <src.png> <dst.dds> [-f] [-2|-4]\n");
         return 1;
     }
     for (int i = 3; i < argc; i++) {
         if (strcmp(argv[i], "-f") == 0) {
             force = 1;
         } else if (strcmp(argv[i], "-2") == 0) {
-            half = 1;
+            scale = 2;
+        } else if (strcmp(argv[i], "-4") == 0) {
+            scale = 4;
         } else {
             fprintf(stderr, "ddsenc: unknown flag %s\n", argv[i]);
             return 1;
@@ -117,9 +119,10 @@ int main(int argc, char **argv) {
     if (!force && (width < 256 || height < 256)) {
         return 3;
     }
-    /* Half-res needs the halved dims to stay DXT-blockable (/4). The caller
-     * (assets.py) retries without -2 on skip. */
-    if (half && ((width & 7) != 0 || (height & 7) != 0)) {
+    /* Downsampled dimensions must remain DXT-blockable (/4). The caller
+     * retries a less aggressive scale on skip. */
+    if ((scale == 2 && ((width & 7) != 0 || (height & 7) != 0))
+            || (scale == 4 && ((width & 15) != 0 || (height & 15) != 0))) {
         return 3;
     }
 
@@ -138,21 +141,21 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* Half-res convention: the header keeps the ORIGINAL (logical) dims — the
+    /* Reduced-data convention: the header keeps the ORIGINAL (logical) dims — the
      * game's layout/UV math reads them via texture.getWidth() — while the
-     * block data is encoded at half size. stsv_tex_image_compressed infers
+     * block data is encoded at a smaller size. stsv_tex_image_compressed infers
      * the actual upload dims from the data size. */
     int enc_w = width, enc_h = height;
-    if (half) {
-        unsigned char *halved = halve(rgba, width, height);
+    for (int current_scale = 1; current_scale < scale; current_scale *= 2) {
+        unsigned char *halved = halve(rgba, enc_w, enc_h);
         stbi_image_free(rgba);
         if (halved == NULL) {
             fprintf(stderr, "ddsenc: out of memory\n");
             return 1;
         }
         rgba = halved;
-        enc_w = width / 2;
-        enc_h = height / 2;
+        enc_w /= 2;
+        enc_h /= 2;
     }
 
     int block_bytes = has_alpha ? 16 : 8;
