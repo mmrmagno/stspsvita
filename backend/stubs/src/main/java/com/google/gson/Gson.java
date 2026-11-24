@@ -269,7 +269,7 @@ public class Gson {
         // form ran a setjmp/longjmp round-trip (plus an exception allocation)
         // per missing field per superclass level — the hottest exception path
         // in the port, and the site of a rare on-device crash (a null Class
-        // reached getSuperclass after the longjmp;).
+        // reached getSuperclass after the longjmp).
         for (Class<?> c = cls; c != null && c != Object.class; c = c.getSuperclass()) {
             for (Field f : c.getDeclaredFields()) {
                 if (f.getName().equals(name)) {

@@ -215,24 +215,6 @@ public class Gdx2DPixmap implements Disposable {
         }
     }
 
-    public static void dumpStats(String label) {
-        System.err.println("[DIAG pixmap] summary " + label
-                + " live=" + kb(liveBytes) + "KB"
-                + " peak=" + kb(peakLiveBytes) + "KB"
-                + " livePixmaps=" + livePixmaps
-                + " peakPixmaps=" + peakLivePixmaps
-                + " totalPixmaps=" + totalPixmaps
-                + " disposed=" + disposedPixmaps
-                + " large=" + largePixmaps
-                + " compressed=" + compressedPixmaps
-                + " allocated=" + kb(totalAllocatedBytes) + "KB"
-                + " disposedBytes=" + kb(totalDisposedBytes) + "KB");
-    }
-
-    private static long kb(long bytes) {
-        return bytes / 1024L;
-    }
-
     private void loadDds(byte[] data, int offset, int len) throws IOException {
         if (len < 128) {
             throw new IOException("DDS too short");

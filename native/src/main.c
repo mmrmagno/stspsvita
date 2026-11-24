@@ -62,6 +62,8 @@ int main(int argc, char **argv) {
      * clobbering; truncate once up front. Batch ordinary stdout INFO writes;
      * stderr remains unbuffered so abort/crash diagnostics survive. */
     {
+        remove("ux0:data/stsvita/stsvita.prev.log");
+        rename("ux0:data/stsvita/stsvita.log", "ux0:data/stsvita/stsvita.prev.log");
         FILE *f = fopen("ux0:data/stsvita/stsvita.log", "w");
         if (f) fclose(f);
     }

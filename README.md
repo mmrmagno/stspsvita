@@ -1,264 +1,99 @@
 # STSPSVITA
 
-STSPSVITA is a build pipeline for bringing Slay the Spire to PlayStation Vita.
-Point it at your own PC copy of the game, run one script, and it produces a
-Vita-ready VPK plus optimized assets for your device.
+Play your own copy of Slay the Spire on a PS Vita.
 
-The repo ships only the porting tools and Vita-specific runtime code. It does
-not include Slay the Spire game code, game assets, generated VPKs, or generated
-asset packs; everything derived from the game is created locally from your own
-`desktop-1.0.jar`.
+## Why
 
-Status: pre-alpha. Expect rough edges, long build times, and hardware-specific
-issues.
+I wanted to play Slay the Spire on my Vita and there was no way to do it. The PC
+version is a Java game and the Vita can't run Java, so I compile the game's
+bytecode to native ARM code instead.
 
-## No Prebuilt VPK
+## What it does
 
-This project does not ship a ready-made VPK. The Vita executable is generated
-from your local `desktop-1.0.jar`, so a public VPK would contain transformed
-Slay the Spire game code. The intended distribution model is:
+There are two parts:
 
-1. Clone this source repo.
-2. Provide your own legally purchased `desktop-1.0.jar`.
-3. Run the build locally.
-4. Install the locally generated VPK on your own Vita.
+- **The launcher**. It checks that everything is in place and starts the game.
+- **The build**, which runs on your PC. It takes `desktop-1.0.jar` from your own
+  copy of Slay the Spire and makes the game files, plus a `SlayTheSpire.vpk` that
+  has the launcher with the game's own bubble and LiveArea.
 
-Do not upload generated VPKs or generated asset folders to GitHub Releases,
-VitaDB, forums, Discord, or mirrors.
+The `STSPSVITA.vpk` in the releases is the same launcher with plain art and
+nothing from the game in it.
 
-## Requirements
+I played it through all four acts with all four characters on a real Vita, and I
+tested this version on a PCH-1000 and a PCH-2000. I have not tested it on a PS TV.
 
-- PS Vita or PSTV with HENkaku/h-encore.
-- `libshacccg.suprx` installed on the Vita.
-- A legal PC copy of Slay the Spire containing `desktop-1.0.jar`.
-- A Linux, macOS, or WSL2 build machine.
-- VitaSDK, with `VITASDK` set and `$VITASDK/bin` on `PATH`.
-- JDK 17 or newer.
-- Gradle.
-- CMake, Make, Python 3, GCC.
-- ImageMagick 7, providing `magick`.
-- `ffmpeg`, required unless you build with `--audio-kbps 0`.
+Don't share your build output. It is the game, compiled from your copy.
 
-## Windows Setup
+## What you need
 
-Native Windows builds are not supported. Use WSL2 with Ubuntu.
+- A hacked PS Vita with VitaShell and unsafe homebrew enabled.
+- `libshacccg.suprx` on the Vita. [PIB Configuration Tool](https://github.com/SonicMastr/PIB-Configuration-Tool)
+  installs it for you, ShaRKF00D works too. The launcher tells you if it is missing.
+- Slay the Spire for PC, V2.3.4. I build from the Steam Linux version. Other
+  versions are refused unless you pass `--allow-unsupported-input`.
+- Docker or Podman, about 4 GB of disk for the image and 6 GB of free RAM.
 
-Install WSL2 from an elevated PowerShell:
+## Install
 
-```powershell
-wsl --install -d Ubuntu
-```
+1. Build the game files. Replace the first path with your Slay the Spire folder:
 
-Open Ubuntu, then install host build tools:
+   ```sh
+   mkdir -p out
+   docker run --rm --network none --user "$(id -u):$(id -g)" \
+     -v "$HOME/.steam/root/steamapps/common/SlayTheSpire:/game:ro" \
+     -v "$PWD/out:/out" \
+     ghcr.io/mmrmagno/stspsvita-builder:1.0
+   ```
 
-```sh
-sudo apt update
-sudo apt install -y \
-  build-essential git make cmake python3 \
-  openjdk-17-jdk imagemagick ffmpeg \
-  unzip zip wget ca-certificates
-```
+   On Windows, with Docker Desktop in PowerShell:
 
-Install Gradle. If your Ubuntu package is modern enough, this is fine:
+   ```powershell
+   mkdir out
+   docker run --rm --network none `
+     -v "C:\Program Files (x86)\Steam\steamapps\common\SlayTheSpire:/game:ro" `
+     -v "${PWD}\out:/out" `
+     ghcr.io/mmrmagno/stspsvita-builder:1.0
+   ```
 
-```sh
-sudo apt install -y gradle
-```
+   The container has no network access and can only read your game folder.
 
-Check versions:
+2. Copy the contents of `out/` to `ux0:` on the Vita. You should end up with
+   `ux0:SlayTheSpire.vpk`, `ux0:data/stsvita/game.manifest` and
+   `ux0:data/stsvita/assets/`.
 
-```sh
-java -version
-gradle --version
-```
+   Over Wi-Fi, press SELECT in VitaShell and run this from a clone of this repo.
+   It only sends what changed:
 
-Use JDK 17 or newer. If Ubuntu's Gradle package is too old, install Gradle via
-SDKMAN or the official Gradle binary instead.
+   ```sh
+   tools/deploy_assets.py --src out/data/stsvita --host <vita-ip>
+   curl -T out/SlayTheSpire.vpk ftp://<vita-ip>:1337/ux0:/
+   ```
 
-For reliability, keep the repo inside the WSL Linux filesystem, such as
-`~/stspsvita`, not under `/mnt/c/...`.
+3. Install `ux0:SlayTheSpire.vpk` with VitaShell. If you already installed
+   `STSPSVITA.vpk`, this replaces it.
 
-If WSL runs out of memory during TeaVM transpilation, create this file on the
-Windows side:
+4. Start Slay the Spire. The first start installs the game and takes a bit longer.
 
-```text
-C:\Users\<you>\.wslconfig
-```
+Your saves are in `ux0:data/stsvita/saves` and `ux0:data/stsvita/preferences`.
+Updating or reinstalling doesn't touch them.
 
-with:
+## Updating
 
-```ini
-[wsl2]
-memory=8GB
-processors=4
-swap=8GB
-```
+Pull the new builder image, build again, copy `out/` over the old files and install
+`SlayTheSpire.vpk` again. Hold SELECT while the launcher starts to see which build you have.
 
-Then restart WSL:
+## Build options
 
-```powershell
-wsl --shutdown
-```
+Put these at the end of the `docker run` command:
 
-## VitaSDK Setup
+| Option | What it does |
+|---|---|
+| `--langs eng,jpn` | Keep more languages. The default is English only, the other fonts add about 160 MB |
+| `--audio-kbps 48` | Better audio. The default is 32, and 0 copies the original files |
+| `--allow-unsupported-input` | Try a game version I haven't tested |
 
-Inside Linux, macOS, or WSL2:
-
-```sh
-sudo mkdir -p /usr/local/vitasdk
-sudo chown "$USER:$USER" /usr/local/vitasdk
-
-echo 'export VITASDK=/usr/local/vitasdk' >> ~/.bashrc
-echo 'export PATH=$VITASDK/bin:$PATH' >> ~/.bashrc
-source ~/.bashrc
-
-git clone https://github.com/vitasdk/vdpm
-cd vdpm
-./bootstrap-vitasdk.sh
-./install-all.sh
-```
-
-Open a new shell and verify:
-
-```sh
-echo "$VITASDK"
-arm-vita-eabi-gcc --version
-```
-
-If the native link step fails with `cannot find -l...`, install or update the
-missing VitaSDK package, then rerun the build.
-
-## Quick Start
-
-Clone the repo and copy in your game jar:
-
-```sh
-git clone https://github.com/mmrmagno/stspsvita.git
-cd stspsvita
-
-mkdir -p game
-cp /path/to/SlayTheSpire/desktop-1.0.jar game/
-```
-
-On WSL, a Steam install is usually reachable through `/mnt/c`, for example:
-
-```sh
-cp "/mnt/c/Program Files (x86)/Steam/steamapps/common/SlayTheSpire/desktop-1.0.jar" game/
-```
-
-Build:
-
-```sh
-./build.sh --sts-dir game
-```
-
-`build.sh` is a dependency-checking wrapper around the Make targets used during
-development. It preflights every required tool, fingerprints your jar, cleans
-the previous generated output, and runs the full validated pipeline:
-
-```text
-verify -> extract -> assets -> livearea -> transpile -> packages -> validate
-```
-
-You can point it at an install folder instead of copying the jar, or name the
-jar directly:
-
-```sh
-./build.sh --sts-dir "$HOME/.steam/root/steamapps/common/SlayTheSpire"
-./build.sh --sts-jar /path/to/desktop-1.0.jar
-```
-
-DDS generation, half-resolution texture selection, PNG/JPG fallback handling,
-LiveArea generation, TeaVM transpilation, Vita runtime patching, and native VPK
-packaging are all performed by this chain. When a valid DDS is generated, its
-source PNG/JPG is removed from the processed payload; images that are not good
-DDS candidates remain in their original format.
-
-A successful build produces four artifacts from one processed asset tree and
-one generated C tree:
-
-- `build/STSVITA.vpk`, the full package with assets bundled inside
-- `build/STSVITA-slim.vpk`, the code-only package
-- `work/assets_vita/`, the slim package's external asset payload
-- `build/build-manifest.json`, recording the input, options, tool versions,
-  asset counts, validation results, and output hashes
-
-Install either VPK with VitaShell. The slim package is usually better while you
-iterate: install it once, copy the assets once, then reinstall only code.
-
-Audio is re-encoded at 32kbps/24kHz by default. Use `--audio-kbps 48` for higher
-fidelity at the source rate, or `--audio-kbps 0` to copy the originals
-untouched. `ffmpeg` is only required when the rate is nonzero.
-
-After one full build you can rebuild just the code:
-
-```sh
-./build.sh --sts-dir game --incremental
-```
-
-Incremental mode reuses `work/assets_vita/` and `work/generated_c/` and emits
-only the slim VPK. Run a full build when Java, backend, or runtime-generation
-inputs change.
-
-Always install the VPK and `work/assets_vita/` produced by the same clean
-build. After updating the port, do not reuse an older processed asset folder.
-
-Copy the contents of `work/assets_vita/` to:
-
-```text
-ux0:data/stsvita/assets/
-```
-
-Copy the contents, not the `assets_vita` directory itself.
-
-The final layout should look like:
-
-```text
-ux0:data/stsvita/assets/build.properties
-ux0:data/stsvita/assets/audio/...
-ux0:data/stsvita/assets/images/...
-```
-
-You can also upload the assets over VitaShell FTP:
-
-```sh
-make deploy-assets VITA_IP=<your-vita-ip>
-```
-
-For Vita3K, replace its existing asset directory so stale files cannot survive:
-
-```sh
-VITA3K_UX0="$HOME/.local/share/Vita3K/Vita3K/ux0"
-mkdir -p "$VITA3K_UX0/data/stsvita/assets"
-rsync -a --delete work/assets_vita/ "$VITA3K_UX0/data/stsvita/assets/"
-```
-
-## Build Options
-
-Keep extra language fonts. CJK fonts alone are about 160MB, so English-only is
-the default:
-
-```sh
-./build.sh --sts-dir game --langs eng,jpn
-```
-
-Higher-fidelity audio at the source sample rate, or no re-encode at all:
-
-```sh
-./build.sh --sts-dir game --audio-kbps 48
-./build.sh --sts-dir game --audio-kbps 0
-```
-
-The build refuses game versions it has not been validated against. If you are
-deliberately testing an unknown but structurally compatible jar:
-
-```sh
-./build.sh --sts-dir game --allow-unsupported-input
-```
-
-Run `./build.sh --help` for all script flags.
-
-## Transferring PC Progress
+## Moving your PC progress over
 
 The port stores its writable game data under `ux0:data/stsvita/`, in the same
 two folders and the same file formats the PC release uses:
@@ -355,7 +190,8 @@ tools/import_progress.py --ftp-host 192.168.1.42 \
 ```
 
 A rollback also previews without `--apply`, and it refuses a backup whose files
-no longer match its manifest.
+no longer match its manifest. It puts back every file the import changed. Files the
+import added stay on the Vita.
 
 ### Progress Transfer Troubleshooting
 
@@ -399,114 +235,42 @@ To run the tool's tests, which use synthetic fixtures and never touch game
 data:
 
 ```sh
-python3 -m unittest discover -s tools -p 'test_*.py'
+make test
 ```
 
-## Manual Make Targets
+## Building without the container
 
-`build.sh` is the supported interface. The Makefile stays available as the
-composable contributor and debugging interface. `make release` is the full
-pipeline that `build.sh` drives:
+You need VitaSDK, JDK 17 or newer, Gradle, CMake, Make, Python 3.9 or newer, GCC,
+ImageMagick 7 and ffmpeg. The container pins the vitaGL and vitaShaRK versions
+I tested with, see `docker/Dockerfile`.
 
 ```sh
-make release STS_DIR=game
+./build.sh --sts-dir /path/to/SlayTheSpire
+make launcher
+make test
 ```
 
-For pipeline debugging, the stages can also be run directly:
-
-```sh
-make verify STS_DIR=game
-make extract STS_DIR=game
-make assets STS_DIR=game
-make livearea STS_DIR=game
-make transpile
-make native BUNDLE_ASSETS=OFF
-make validate STS_DIR=game
-```
-
-`make vpk` and `make vpk-slim` build a single package each without the
-cross-checks that `release` runs. `make test` runs the host-side tool tests,
-which need no jar, no VitaSDK and no device.
-
-`extract`, `assets`, and `livearea` declare their prerequisites, so invoking
-a later target may rerun earlier stages. Generated output is written to `work/`
-and `build/`; both directories are ignored by git and must not be distributed.
+The files for the Vita end up in `out/`. After one full build, `--incremental`
+rebuilds only the native code.
 
 ## Troubleshooting
 
-`provide --sts-dir or --sts-jar`
+| What you see | What to do |
+|---|---|
+| Shader compiler missing | Install `libshacccg.suprx`, see above |
+| Game not installed | Copy the contents of `out/` to `ux0:` |
+| Assets do not match | The copy didn't finish, or the assets are from another build. Copy all of `out/` again |
+| Writing to the app folder failed | Restart the Vita and try again |
+| `/out is not writable` | Create `out` first and keep the `--user` flag |
+| The build runs out of memory | Give Docker Desktop or WSL at least 6 GB |
 
-`build.sh` needs to be told where the game is. Pass `--sts-dir` with the folder
-containing `desktop-1.0.jar`, or `--sts-jar` with the jar itself. If you copied
-the jar into the drop folder, that is `--sts-dir game`.
-
-The build refuses an unrecognised jar fingerprint
-
-Only validated game versions are supported. Override deliberately with
-`--allow-unsupported-input` if you are testing an unknown but structurally
-compatible jar.
-
-`VITASDK is not set`
-
-Reload your shell after adding `VITASDK` to `.bashrc`, or run:
-
-```sh
-export VITASDK=/usr/local/vitasdk
-export PATH=$VITASDK/bin:$PATH
-```
-
-`magick not found` or `convert not found`
-
-Install ImageMagick:
-
-```sh
-sudo apt install -y imagemagick
-```
-
-Vita3K reports many missing `.dds` files
-
-This is expected when the next log line opens the same path as `.png` or
-`.jpg`. The asset pipeline only keeps DDS when compression is useful or
-required; other images intentionally remain in their original format. A real
-asset-copy problem is when both the DDS probe and its PNG/JPG fallback are
-missing. Recopy the complete asset tree with the `rsync --delete` command
-above. If card art, UI textures, or effects are blank, run `./build.sh --clean`
-and replace both the installed VPK and the complete asset directory; that is
-not an expected fallback-only condition.
-
-TeaVM or Gradle runs out of memory
-
-Give WSL more memory, close other applications, and rerun `./build.sh`.
-
-Vita linker error: `cannot find -l<name>`
-
-Your VitaSDK packages are incomplete or outdated. Run:
-
-```sh
-vitasdk-update
-```
-
-or install the missing package through VitaSDK's package manager.
-
-## Repository Layout
-
-| Path | Purpose |
-| --- | --- |
-| `build.sh` | One-command public build entrypoint. |
-| `game/` | Local drop folder for `desktop-1.0.jar`; ignored by git. |
-| `pipeline/` | Python verification, extraction, asset, and LiveArea tools. |
-| `backend/` | libGDX Vita backend and desktop-service stubs. |
-| `transpiler/` | TeaVM AOT harness and Vita launcher. |
-| `native/` | Vita C entrypoint, glue, CMake build, and packaging. |
-| `tools/` | Build helper tools, asset FTP upload, and PC progress import. |
+If the game crashes, please open an issue with `ux0:data/stsvita/stsvita.log`. If
+you already started it again, the log you want is `stsvita.prev.log`.
 
 ## Legal
 
-Slay the Spire is copyright Mega Crit Games. This project is not affiliated
-with or endorsed by Mega Crit. Do not distribute built VPKs or generated asset
-folders, because they contain game content from your copy. Distribute this
-source repository instead.
+Slay the Spire is copyright Mega Crit Games. This project is unofficial and not
+affiliated with or endorsed by Mega Crit. The launcher, the builder image and this
+repo contain no game code and no game assets.
 
-## License
-
-MIT for this build tooling. See [LICENSE](LICENSE) .
+My code is MIT, see [LICENSE](LICENSE). The libraries it uses are in `LICENSES/`.

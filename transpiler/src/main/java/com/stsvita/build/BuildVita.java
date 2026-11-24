@@ -45,7 +45,7 @@ public final class BuildVita {
         // texture memory (desktop GL keeps it in the driver); on Vita the
         // decoded pixmaps + stb decode buffers + FreeType share the newlib
         // heap. The old 192MB floor was measured WITH 16MB RGBA pixmap
-        // transients inflating the working set; the M4.dds pipeline removed
+        // transients inflating the working set; the .dds pipeline removed
         // those (peak live pixmaps ~9MB on device now), so the Java floor
         // dropped and we can hand the freed budget to native FreeType, which
         // OOM'd (FT error 64) with only ~88MB native under the 192MB split.
@@ -53,11 +53,11 @@ public final class BuildVita {
         // min == max: TEAVM_PSP's virtualAlloc is a plain malloc of maxHeap at
         // boot (newlib has no mmap), so a smaller min saves NOTHING natively —
         // it only lets the GC's shrink policy park the logical heap at 64MB.
-        // The 2026-07-12 device log showed exactly that (avail 65536KB all
+        // A device log showed exactly that (avail 65536KB all
         // session, free ~0.5MB before each young pause, one pause every couple
         // frames in combat). Pinning the heap at 144MB triples the young-GC
         // allocation runway for free.
-        // 112MB: the 2026-07-16/17 device logs show live Java of
+        // 112MB: device logs show live Java of
         // ~16MB after full GC plus ~9.5MB peak pixmap transients, so 112MB
         // still leaves >4x peak-live runway. The 32MB given back shrinks
         // newlib in lockstep (272->240, main.c) so the NATIVE budget is

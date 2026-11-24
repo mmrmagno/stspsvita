@@ -38,8 +38,11 @@ class ValidationError(RuntimeError):
 
 
 def run_text(*args: str) -> str:
-    proc = subprocess.run(args, cwd=REPO, text=True, stdout=subprocess.PIPE,
-                          stderr=subprocess.STDOUT, check=False)
+    try:
+        proc = subprocess.run(args, cwd=REPO, text=True, stdout=subprocess.PIPE,
+                              stderr=subprocess.STDOUT, check=False)
+    except FileNotFoundError:
+        return "unavailable (not installed)"
     if proc.returncode:
         return f"unavailable (exit {proc.returncode})"
     return proc.stdout.rstrip()
@@ -179,7 +182,7 @@ def validate_generated_inputs(work: Path, jar: Path, jar_hash: str, assets: Path
             if audio_kbps else 0
         ),
         "dds": True,
-        # Quarter-data City layers were reverted 2026-07-17 (visual reject):
+        # Quarter-data City layers were reverted (visual reject):
         # the set must be empty so a stale quarter-encoded tree fails here.
         "dds_quarter_res_paths": [],
     }
@@ -342,13 +345,15 @@ def main() -> int:
         if native_eboot.is_file() and sha256_file(native_eboot) != outputs["eboot"]["sha256"]:
             raise ValidationError("packaged executable differs from build/native/eboot.bin")
 
-        revision = run_text("git", "rev-parse", "HEAD")
-        status_text = run_text("git", "status", "--porcelain=v1", "--untracked-files=all")
+        pinned = os.environ.get("STSV_REVISION", "")
+        revision = pinned or run_text("git", "rev-parse", "HEAD")
+        status_text = "" if pinned else run_text(
+            "git", "status", "--porcelain=v1", "--untracked-files=all")
         dirty_paths = [] if not status_text else status_text.splitlines()
         if dirty_paths and dirty_paths[0].startswith("unavailable"):
             dirty_paths = [dirty_paths[0]]
-        short_revision = revision[:12] if len(revision) >= 12 else revision
-        build_id_hash = outputs["slim_vpk"]["sha256"]
+        short_revision = "nogit" if revision.startswith("unavailable") else revision[:12]
+        build_id_hash = outputs["eboot"]["sha256"]
         build_id = f"{short_revision}{'-dirty' if dirty_paths else ''}-{build_id_hash[:12]}"
         manifest = {
             "schema_version": 1,

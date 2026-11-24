@@ -3,8 +3,8 @@
 
 Progress is two directories next to the desktop game's jar:
 
-  saves/ <CHAR>.autosave (+.backUp), prefixed "<slot>_" for slots 1-2
-  preferences/ STSPlayer, STSUnlocks, STSSeenCards,... (+.backUp), same
+  saves/         <CHAR>.autosave (+ .backUp), prefixed "<slot>_" for slots 1-2
+  preferences/   STSPlayer, STSUnlocks, STSSeenCards, ... (+ .backUp), same
                  "<slot>_" prefix. JSON written by SaveHelper/Prefs.
 
 Both are plain files the port reads through VitaFileHandle, so the desktop
@@ -91,7 +91,7 @@ SAVE_SUFFIX = ".autosave"
 
 #: STSSaveSlots is the odd one out: it carries no "<slot>_" prefix, yet it
 #: indexes every slot ("PROFILE_NAME" for slot 0, "1_PLAYTIME", "2_COMPLETION"
-#:...). The save-select screen renders from it, so importing a slot without
+#: ...). The save-select screen renders from it, so importing a slot without
 #: updating it leaves that slot looking empty. Replacing it wholesale is just
 #: as wrong: it would overwrite the destination's own slot-0 name, playtime
 #: and completion. It is merged key-by-key instead, for the imported slots.
@@ -445,7 +445,7 @@ def parse_list_line(line: str) -> str | None:
     """File name from one UNIX-style LIST row, or None for dirs/junk.
 
     VitaShell answers in the classic nine-field form, e.g.
-    "-rw-r--r-- 1 vita vita 16720 Aug 1 19:46 THE_SILENT.autosave".
+    "-rw-r--r-- 1 vita vita 16720 Aug 1  19:46 THE_SILENT.autosave".
     """
     if not line or line[0] == "d":
         return None
@@ -671,7 +671,7 @@ def build_plan(scan: Scan, dest: Destination, replace: set[int]) -> Plan:
     slots = plan.imported_slots
     for item in index_items:
         if item.rel.endswith(BACKUP_SUFFIX):
-            # A merged.backUp would be a half-written safety net: the game
+            # A merged .backUp would be a half-written safety net: the game
             # restores from it on corruption, so a partial one could wipe the
             # destination's own slot metadata. Leave the game to write its own.
             plan.index_skipped.append(item.rel)

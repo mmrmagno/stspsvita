@@ -5,7 +5,7 @@ They sit **first** on the TeaVM classpath, shadowing the real classes, so the
 game's integration code compiles/links but takes its built-in "not available"
 paths (the same ones it uses when Steam isn't running on desktop).
 
-Grown iteratively: run `make transpile`, TeaVM reports each missing
+Grown iteratively at M2: run `make transpile`, TeaVM reports each missing
 class/member with the call chain that reaches it, add the member, repeat.
 Only what the linker actually reaches needs to exist.
 

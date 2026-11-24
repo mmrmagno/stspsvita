@@ -118,7 +118,7 @@ public class VitaFileHandle extends FileHandle {
         boolean image = p.endsWith(".png") || p.endsWith(".jpg") || p.endsWith(".dds");
         if (image) {
             // Loads are synchronous (read -> decode -> upload on one thread),
-            // so this names the texture in the [DIAG dxt] SKIP/SPILL lines.
+            // so this names the texture in the [tex] SKIP/SPILL lines.
             VitaNatives.texNotePath(p);
             byte[] headerOnly = skipDoomedDds();
             if (headerOnly != null) {
@@ -455,7 +455,7 @@ public class VitaFileHandle extends FileHandle {
         String p = path();
         // JPGs use <name>.jpg.dds, PNGs <stem>.dds: the scene atlases ship
         // <stem>.png AND <stem>.jpg as different pages, so a shared stem let
-        // the jpg's dds shadow the png's (mosaic backgrounds, 2026-07-12).
+        // the jpg's dds shadow the png's (mosaic backgrounds).
         if (p.endsWith(".jpg")) {
             File dds = new File(p + ".dds");
             if (dds.isFile()) {

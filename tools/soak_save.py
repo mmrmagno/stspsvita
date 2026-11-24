@@ -2,7 +2,7 @@
 """Soak-test accelerator: buff an on-device autosave into a god run.
 
 Slay the Spire saves are gson JSON, optionally obfuscated as
-base64(bytes XOR cycle("key")) (SaveFileObfuscator).
+base64(bytes XOR cycle("key")) (SaveFileObfuscator, decompiled).
 The loader accepts both forms; this tool preserves whichever it found.
 
 Usage:

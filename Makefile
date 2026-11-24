@@ -1,11 +1,14 @@
 # STSVITA build orchestration.
-#./build.sh --sts-dir ~/.steam/root/steamapps/common/SlayTheSpire
-# `build.sh` is the supported release interface. These targets remain the
+#
+#   ./build.sh --sts-dir ~/.steam/root/steamapps/common/SlayTheSpire
+#
+# `build.sh` is the supported release interface.  These targets remain the
 # composable contributor/debug interface.
+#
 # Options:
-# LANGS=eng,jpn game languages whose (CJK) fonts to keep
-# AUDIO_KBPS=32 re-encode OGGs (needs ffmpeg); 48 for higher fidelity,
-# 0 copies through
+#   LANGS=eng,jpn     game languages whose (CJK) fonts to keep
+#   AUDIO_KBPS=32     re-encode OGGs (needs ffmpeg); 48 for higher fidelity,
+#                     0 copies through
 
 STS_DIR       ?=
 LANGS         ?= eng
@@ -15,11 +18,13 @@ PY            := python3
 BUNDLE_ASSETS ?= ON
 VITA_IP       ?=
 ALLOW_UNSUPPORTED ?= 0
+OUT           ?= out
+GRADLE_FLAGS  ?=
 VERIFY_FLAGS  := $(if $(filter 1 ON yes true,$(ALLOW_UNSUPPORTED)),--allow-unknown,)
 
 .PHONY: all release packages vpk vpk-slim incremental-slim verify extract \
         assets livearea transpile native validate validate-slim \
-        deploy-assets test clean clean-build
+        deploy-assets stage launcher bubble test clean clean-build
 .NOTPARALLEL: release packages
 
 all: release
@@ -40,7 +45,7 @@ livearea: assets
 
 transpile:
 	@test -f $(WORK)/jar_path.txt || { echo "run 'make extract' first"; exit 2; }
-	cd transpiler && gradle transpile
+	cd transpiler && gradle $(GRADLE_FLAGS) transpile
 
 native:
 	@test -n "$$VITASDK" || { echo "VITASDK env var not set — install https://vitasdk.org"; exit 2; }
@@ -56,9 +61,9 @@ native:
 	@echo "VPK: build/STSVITA$(if $(filter OFF,$(BUNDLE_ASSETS)),-slim).vpk"
 
 # Canonical release: one verified asset tree and generated-C tree feed both
-# package forms. Toggling BUNDLE_ASSETS only reruns CMake's packaging step;
+# package forms.  Toggling BUNDLE_ASSETS only reruns CMake's packaging step;
 # validate_build.py proves that the executable bytes remain identical.
-release: assets livearea transpile packages validate
+release: assets livearea transpile packages validate stage bubble
 
 packages:
 	@test -d "$(WORK)/assets_vita" || { echo "run 'make assets' first"; exit 2; }
@@ -85,7 +90,7 @@ vpk-slim: livearea transpile
 	$(MAKE) native BUNDLE_ASSETS=OFF
 	@echo "Slim VPK needs assets at ux0:data/stsvita/assets — make deploy-assets VITA_IP=.."
 
-# Fast native-only loop. This deliberately reuses the existing asset and
+# Fast native-only loop.  This deliberately reuses the existing asset and
 # generated-C trees; run `make transpile` first when backend/Java code changes.
 incremental-slim: verify
 	@test -d "$(WORK)/assets_vita" || { echo "incremental build needs $(WORK)/assets_vita; run a full ./build.sh first"; exit 2; }
@@ -93,14 +98,36 @@ incremental-slim: verify
 	@test -f "$(WORK)/sce_sys/icon0.png" || { echo "incremental build needs $(WORK)/sce_sys; run a full ./build.sh first"; exit 2; }
 	$(MAKE) native BUNDLE_ASSETS=OFF
 	$(MAKE) validate-slim STS_DIR="$(STS_DIR)" LANGS="$(LANGS)" AUDIO_KBPS="$(AUDIO_KBPS)"
+	$(MAKE) stage bubble OUT="$(OUT)"
 
 # One-time upload of the processed asset payload to the Vita over VitaShell FTP
 # (enable it with SELECT in VitaShell; default port 1337).
 deploy-assets:
-	@test -d "$(WORK)/assets_vita" || { echo "no $(WORK)/assets_vita — run 'make assets' first"; exit 2; }
+	@test -f "$(OUT)/data/stsvita/files.sha256" || { echo "nothing staged, run a build first"; exit 2; }
 	@test -n "$(VITA_IP)" || { echo "set VITA_IP=<vita ip>  (VitaShell FTP)"; exit 2; }
-	$(PY) tools/deploy_assets.py --src $(WORK)/assets_vita \
-	  --host $(VITA_IP) --dest ux0:/data/stsvita/assets
+	$(PY) tools/deploy_assets.py --src "$(OUT)/data/stsvita" --host $(VITA_IP)
+
+stage:
+	$(PY) tools/stage_data.py --build build --work $(WORK) --out "$(OUT)"
+
+launcher:
+	@test -n "$$VITASDK" || { echo "VITASDK env var not set, install https://vitasdk.org"; exit 2; }
+	cmake -S launcher -B build/launcher \
+	  -DCMAKE_TOOLCHAIN_FILE=$$VITASDK/share/vita.toolchain.cmake
+	cmake --build build/launcher -j
+	@cp build/launcher/STSPSVITA.vpk build/STSPSVITA.vpk
+
+# Same launcher with the bubble art from the user's own game. Never published.
+bubble:
+	@test -f "$(WORK)/sce_sys/icon0.png" || { echo "run 'make livearea' first"; exit 2; }
+	@test -n "$$VITASDK" || { echo "VITASDK env var not set, install https://vitasdk.org"; exit 2; }
+	cmake -S launcher -B build/bubble \
+	  -DCMAKE_TOOLCHAIN_FILE=$$VITASDK/share/vita.toolchain.cmake \
+	  -DSCE_SYS=$(abspath $(WORK)/sce_sys) -DAPP_NAME="Slay the Spire"
+	cmake --build build/bubble -j
+	@mkdir -p "$(OUT)"
+	@cp build/bubble/STSPSVITA.vpk "$(OUT)/SlayTheSpire.vpk"
+	@echo "VPK: $(OUT)/SlayTheSpire.vpk"
 
 # Host-side tool tests. Synthetic fixtures only, never the game's own data,
 # so this needs no jar, no VitaSDK and no device.

@@ -30,8 +30,11 @@ void stsv_gfx_init(void) {
 void stsv_show_loading_screen(void) {
     int width = 0, height = 0, channels = 0;
     unsigned char *pixels = stbi_load(
-        "app0:/loading.png",
+        "ux0:data/stsvita/loading.png",
         &width, &height, &channels, 4);
+    if (!pixels) {
+        pixels = stbi_load("app0:/loading.png", &width, &height, &channels, 4);
+    }
 
     /* The first draw stops vitaGL's library-owned spinning splash thread.
      * This framebuffer then remains visible while the Java world preloads. */

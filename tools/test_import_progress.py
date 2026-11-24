@@ -393,7 +393,7 @@ class TestSlotIndex(Case):
         self.assertIn("merged in", text)
 
     def test_index_backup_is_never_written(self):
-        """A partial.backUp could be restored over a good index on corruption."""
+        """A partial .backUp could be restored over a good index on corruption."""
         dest_dir = self.tmp / "vita"
         dest = ip.LocalDestination(dest_dir)
         dest.put("preferences/STSSaveSlots", self.DEVICE)

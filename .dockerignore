@@ -1,0 +1,14 @@
+*
+!backend
+!docker
+!launcher
+!native
+!pipeline
+!tools
+!transpiler
+!Makefile
+!build.sh
+!LICENSE
+**/__pycache__
+transpiler/build
+transpiler/.gradle

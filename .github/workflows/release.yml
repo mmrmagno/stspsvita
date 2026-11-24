@@ -1,0 +1,71 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  launcher:
+    runs-on: ubuntu-24.04
+    container: vitasdk/vitasdk:2026.08-20261123@sha256:579c6e00c5142fb59c980b6476f6120da54ee1ac832e973e60a43579153d4d4b
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - run: make launcher
+        env:
+          VITASDK: /usr/local/vitasdk
+      - run: python3 tools/check_release.py --vpk build/STSPSVITA.vpk --elf build/launcher/launcher
+      - run: cd build && sha256sum STSPSVITA.vpk > STSPSVITA.vpk.sha256
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vpk
+          path: build/STSPSVITA.vpk*
+          if-no-files-found: error
+
+  builder:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: tag
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          echo "full=$v" >> "$GITHUB_OUTPUT"
+          echo "minor=${v%.*}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          build-args: REVISION=${{ github.sha }}
+          tags: |
+            ghcr.io/mmrmagno/stspsvita-builder:${{ steps.tag.outputs.full }}
+            ghcr.io/mmrmagno/stspsvita-builder:${{ steps.tag.outputs.minor }}
+
+  publish:
+    needs: [launcher, builder]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: vpk
+      - run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --title "$GITHUB_REF_NAME" STSPSVITA.vpk STSPSVITA.vpk.sha256
+        env:
+          GH_TOKEN: ${{ github.token }}

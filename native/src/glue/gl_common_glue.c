@@ -1,5 +1,6 @@
 #include "stsv_gl.h"
 #include "stsvita_glue.h"
+#include "heap_probe.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -11,12 +12,8 @@
 #include <psp2/kernel/sysmem.h>
 #endif
 
-#if defined(__vita__) || defined(VITA)
-static void stsv_city_layer_load_diag(void);
-#endif
-
 /* Last image file read (VitaFileHandle.readBytes notes it) — names the
- * texture in the [DIAG dxt] SKIP/SPILL lines. Loads are synchronous on the
+ * texture in the [tex] SKIP/SPILL lines. Loads are synchronous on the
  * single game thread (read -> decode -> upload), so the last-read image is
  * the upload's source for every real asset. Dynamic pages (glyph atlases)
  * have no file and may show a stale name; they never hit the guard. */
@@ -27,16 +24,10 @@ void stsv_tex_note_path(const void *utf8, int32_t len) {
     if (len < n) n = (int) len;
     memcpy(stsv_tex_path, utf8, (size_t) n);
     stsv_tex_path[n] = '\0';
-#if defined(__vita__) || defined(VITA)
-    if (strstr(stsv_tex_path, "/cityScene/") != NULL) {
-        stsv_city_layer_load_diag();
-    }
-#endif
 }
 
 /* Per-frame runtime stb_dxt compression + glTexImage upload time, polled by
- * the [hitch] logger like the ft/subtex accumulators (combat frame drops,
- *). */
+ * the [hitch] logger like the ft/subtex accumulators (combat frame drops). */
 static int64_t stsv_dxt_us_accum;
 static int32_t stsv_dxt_calls_accum;
 static int64_t stsv_upload_us_accum;
@@ -95,15 +86,11 @@ static void stsv_mark_compressed(void) {
     int id = stsv_bound_tex();
     if (id != 0 && stsv_compressed_n < STSV_MAX_COMPRESSED) {
         stsv_compressed_ids[stsv_compressed_n++] = id;
-        static int mark_logs;
-        if (mark_logs < 128) {
-            mark_logs++;
-            fprintf(stderr, "[DIAG subtex] MARK id=%d path=%s\n", id, stsv_tex_path);
-        }
     }
 }
 
-/* Once a glyph page, always a glyph page: incremental FreeType packer pages are born nearly
+/* Once a glyph page, always a glyph page (the act-title "i"
+ * bug's true mechanism): incremental FreeType packer pages are born nearly
  * empty (>=96% transparent -> kept uncompressed so glTexSubImage2D works).
  * But when a page later takes a FULL re-upload (PixmapPacker's dirty flush
  * at the end of a GlyphLayout), it is by then well below 96% transparent —
@@ -152,7 +139,7 @@ static int stsv_is_compressed(int id) {
 /* GL recycles texture ids. Without this, a deleted compressed texture's id
  * stays marked, and when vitaGL hands the same id to a NEW uncompressed
  * texture, stsv_tex_sub_image_rgba silently drops every sub-upload into it.
- * the act-transition title rendered only "i" —
+ * Device-diagnosed: the act-transition title rendered only "i":
  * dungeonTitleFont's glyph page (created mid-run, after an act of monster
  * atlas create/delete churn) landed on a stale-marked id, so every glyph
  * rasterized after the page's initial full upload was invisible. Called on
@@ -173,7 +160,7 @@ static void stsv_unmark_compressed(int id) {
  * but ONLY after boot: the newlib headroom is also where vitaGL gets its
  * per-frame vertex buffers, and letting the boot preload eat 24MB of it
  * crashed the first menu draw (memcpy into a failed buffer alloc inside
- * _glDrawElements,). Post-create the native
+ * _glDrawElements, C2-12828 dump). Post-create the native
  * working set is stable, and the mid-run loads (boss atlases, scene
  * backgrounds) are exactly the drops the player actually sees. Each
  * admission is gated by a malloc probe that keeps a generous reserve for
@@ -186,7 +173,6 @@ static void stsv_unmark_compressed(int id) {
 #define STSV_SPILL_BUDGET   (6u << 20)
 #define STSV_SPILL_RESERVE  (48u << 20)
 static size_t stsv_spill_used;
-static size_t stsv_spill_peak;
 static int stsv_spill_enabled;
 
 /* Live accounting: without a refund on glDeleteTextures the budget is a
@@ -224,7 +210,7 @@ static void stsv_spill_note(int id, size_t bytes) {
 /* Called from Java once the game's create() has finished (VitaApplication). */
 void stsv_tex_spill_enable(void) {
     stsv_spill_enabled = 1;
-    fprintf(stderr, "[DIAG dxt] spill enabled (budget %dKB, reserve %dKB)\n",
+    fprintf(stderr, "[tex] spill enabled (budget %dKB, reserve %dKB)\n",
             (int) (STSV_SPILL_BUDGET >> 10), (int) (STSV_SPILL_RESERVE >> 10));
 }
 
@@ -233,90 +219,6 @@ static size_t stsv_pool_maxfree(void) {
     size_t fr = vglMemFree(VGL_MEM_RAM);  if (fr > maxfree) maxfree = fr;
     fr = vglMemFree(VGL_MEM_SLOW);         if (fr > maxfree) maxfree = fr;
     return maxfree;
-}
-
-/* Narrow, removable Act-transition diagnostics. All output goes directly to
- * unbuffered stderr so it survives the same abort that loses buffered INFO. */
-static int stsv_city_draw_tracking;
-static int stsv_city_draw_seq;
-static int stsv_trace_current_draw;
-static GLenum stsv_current_draw_mode;
-static GLsizei stsv_current_draw_count;
-static GLenum stsv_current_draw_type;
-static const GLvoid *stsv_current_draw_indices;
-
-static void stsv_diag_memory(const char *event) {
-    struct mallinfo mi = mallinfo();
-    SceKernelFreeMemorySizeInfo free_info = {sizeof(free_info), 0, 0, 0};
-    int free_rc = sceKernelGetFreeMemorySize(&free_info);
-    fprintf(stderr,
-            "[act2-diag] mem event=%s "
-            "pool_free=%lu/%lu/%luKB pool_total=%lu/%lu/%luKB "
-            "spill=%luKB peak=%luKB "
-            "newlib_free=%luKB used=%luKB arena=%luKB top=%luKB blocks=%lu "
-            "kernel_free_rc=0x%08x user=%dKB cdram=%dKB phycont=%dKB\n",
-            event,
-            (unsigned long) (vglMemFree(VGL_MEM_VRAM) >> 10),
-            (unsigned long) (vglMemFree(VGL_MEM_RAM) >> 10),
-            (unsigned long) (vglMemFree(VGL_MEM_SLOW) >> 10),
-            (unsigned long) (vglMemTotal(VGL_MEM_VRAM) >> 10),
-            (unsigned long) (vglMemTotal(VGL_MEM_RAM) >> 10),
-            (unsigned long) (vglMemTotal(VGL_MEM_SLOW) >> 10),
-            (unsigned long) (stsv_spill_used >> 10),
-            (unsigned long) (stsv_spill_peak >> 10),
-            (unsigned long) (mi.fordblks >> 10),
-            (unsigned long) (mi.uordblks >> 10),
-            (unsigned long) (mi.arena >> 10),
-            (unsigned long) (mi.keepcost >> 10),
-            (unsigned long) mi.ordblks,
-            (unsigned int) free_rc,
-            free_info.size_user >> 10,
-            free_info.size_cdram >> 10,
-            free_info.size_phycont >> 10);
-}
-
-void stsv_transition_diag(const void *utf8, int32_t len) {
-    char label[160];
-    int n = (int) sizeof(label) - 1;
-    if (len < n) n = (int) len;
-    memcpy(label, utf8, (size_t) n);
-    label[n] = '\0';
-    fprintf(stderr, "[act2-diag] boundary=%s\n", label);
-    stsv_diag_memory(label);
-    if (strstr(label, "city-music-open") != NULL) {
-        stsv_city_draw_tracking = 1;
-        stsv_city_draw_seq = 0;
-    }
-}
-
-static void stsv_city_layer_load_diag(void) {
-    fprintf(stderr, "[act2-diag] city-layer stage=load-begin path=%s\n",
-            stsv_tex_path);
-    stsv_diag_memory("city-layer-load-begin");
-}
-
-static void stsv_city_layer_admit_diag(const char *decision, size_t need,
-                                       int width, int height, const char *tag) {
-    if (strstr(stsv_tex_path, "/cityScene/") == NULL) {
-        return;
-    }
-    fprintf(stderr,
-            "[act2-diag] city-layer stage=admission decision=%s%s "
-            "size=%dx%d need=%luKB path=%s\n",
-            decision, tag, width, height, (unsigned long) (need >> 10),
-            stsv_tex_path);
-    stsv_diag_memory("city-layer-admission");
-}
-
-static void stsv_city_layer_read_admit_diag(const char *decision, size_t need) {
-    if (strstr(stsv_tex_path, "/cityScene/") == NULL) {
-        return;
-    }
-    fprintf(stderr,
-            "[act2-diag] city-layer stage=read-admission decision=%s "
-            "need=%luKB path=%s\n",
-            decision, (unsigned long) (need >> 10), stsv_tex_path);
-    stsv_diag_memory("city-layer-read-admission");
 }
 
 /* These UI textures are loaded at the end of ImageMaster's preload or while
@@ -349,70 +251,52 @@ static int stsv_boot_critical_texture(void) {
 
 /* Read-only preview of stsv_tex_can_alloc: would a texture of this size be
  * admitted right now? Nothing is reserved. VitaFileHandle asks BEFORE reading
- * a big.dds payload off the SD card — the load-then-drop waste (17MB of
+ * a big .dds payload off the SD card, the load-then-drop waste (17MB of
  * char-select shoulders at 0.7s each, ~14s of the save-slot stall) paid the
  * full read+decode cost for textures the guard then blanked anyway. */
 int32_t stsv_tex_would_fit(int32_t need) {
     size_t n = (size_t) need;
     if (stsv_pool_maxfree() > n + (1u << 20)) {
-        stsv_city_layer_read_admit_diag("pool", n);
         return 1;
     }
     if ((stsv_spill_enabled || stsv_boot_critical_texture())
             && stsv_spill_used + n <= STSV_SPILL_BUDGET) {
-        void *probe = malloc(n + STSV_SPILL_RESERVE);
-        if (probe != NULL) {
-            free(probe);
-            stsv_city_layer_read_admit_diag("spill", n);
+        if (stsv_heap_can_alloc(n + STSV_SPILL_RESERVE)) {
             return 1;
         }
     }
-    stsv_city_layer_read_admit_diag("skip", n);
     return 0;
 }
 
 static int stsv_tex_can_alloc(size_t need, int width, int height, const char *tag) {
     size_t maxfree = stsv_pool_maxfree();
     if (maxfree > need + (1u << 20)) {
-        stsv_city_layer_admit_diag("pool", need, width, height, tag);
         return 1;
     }
     int boot_critical = !stsv_spill_enabled && stsv_boot_critical_texture();
     if ((stsv_spill_enabled || boot_critical)
             && stsv_spill_used + need <= STSV_SPILL_BUDGET) {
-        void *probe = malloc(need + STSV_SPILL_RESERVE);
-        if (probe != NULL) {
-            free(probe);
+        if (stsv_heap_can_alloc(need + STSV_SPILL_RESERVE)) {
             stsv_spill_used += need;
             stsv_spill_note(stsv_bound_tex(), need);
-            if (stsv_spill_used > stsv_spill_peak) {
-                stsv_spill_peak = stsv_spill_used;
-            }
-            fprintf(stderr, "[DIAG dxt] %sSPILL%s %dx%d need=%dKB spill_used=%dKB path=%s\n",
+            fprintf(stderr, "[tex] %sSPILL%s %dx%d need=%dKB spill_used=%dKB path=%s\n",
                     boot_critical ? "BOOT-" : "", tag,
                     width, height, (int) (need >> 10),
                     (int) (stsv_spill_used >> 10), stsv_tex_path);
-            stsv_city_layer_admit_diag("spill", need, width, height, tag);
             return 1;
         }
     }
     static int skips = 0;
     if (skips++ < 96) {
-        fprintf(stderr, "[DIAG dxt] SKIP%s %dx%d need=%dKB maxfree=%dKB spill_used=%dKB path=%s\n",
+        fprintf(stderr, "[tex] SKIP%s %dx%d need=%dKB maxfree=%dKB spill_used=%dKB path=%s\n",
                 tag, width, height, (int) (need >> 10), (int) (maxfree >> 10),
                 (int) (stsv_spill_used >> 10), stsv_tex_path);
     }
-    stsv_city_layer_admit_diag("skip", need, width, height, tag);
     return 0;
 }
 
-/* The installed vitaGL custom-shader path calls vgl_reserve_data_pool(size)
- * and unconditionally memcpy()s into its result. Linker wrapping preserves
- * that behavior while exposing the first City draws and an actual invalid
- * fallback result. sceKernelFindMemBlockByAddr cannot validate vitaGL/newlib
- * suballocations: it rejects valid interior ranges and made the first version
- * of this diagnostic emit tens of thousands of false INVALID records. */
-extern unsigned char *circular_data_pool[];
+/* vitaGL's draw path memcpy()s into this result without checking it. Report an
+ * unusable reservation before the crash that follows. */
 extern unsigned char *circular_data_pool_ptr[];
 extern unsigned char *circular_data_pool_limit[];
 extern int vgl_circular_idx;
@@ -421,75 +305,23 @@ void *__real_vgl_reserve_data_pool(uint32_t size);
 
 void *__wrap_vgl_reserve_data_pool(uint32_t size) {
     int idx = vgl_circular_idx;
-    uintptr_t base = 0, before = 0, limit = 0;
+    uintptr_t before = 0, limit = 0;
     if (idx >= 0 && idx < 4) {
-        base = (uintptr_t) circular_data_pool[idx];
         before = (uintptr_t) circular_data_pool_ptr[idx];
         limit = (uintptr_t) circular_data_pool_limit[idx];
     }
-    int overflow = before > limit || (uintptr_t) size > limit - before;
     void *result = __real_vgl_reserve_data_pool(size);
-    int invalid = result == NULL || (uintptr_t) result < UINT32_C(0x10000000);
-    if (stsv_trace_current_draw || invalid) {
-        fprintf(stderr,
-                "[act2-diag] draw-reserve seq=%d mode=0x%x count=%d "
-                "type=0x%x indices=%p size=%u result=%p "
-                "invalid=%d idx=%d overflow=%d "
-                "circular=%p ptr=%p limit=%p post_ptr=%p\n",
-                stsv_city_draw_seq, (unsigned int) stsv_current_draw_mode,
-                (int) stsv_current_draw_count,
-                (unsigned int) stsv_current_draw_type,
-                stsv_current_draw_indices, (unsigned int) size, result,
-                invalid, idx, overflow, (void *) base, (void *) before, (void *) limit,
-                idx >= 0 && idx < 4 ? (void *) circular_data_pool_ptr[idx] : NULL);
-    }
-    if (invalid) {
-        stsv_diag_memory("draw-reserve-INVALID");
+    if (result == NULL || (uintptr_t) result < UINT32_C(0x10000000)) {
+        fprintf(stderr, "[gl] draw reservation failed size=%u result=%p idx=%d ptr=%p limit=%p\n",
+                (unsigned int) size, result, idx, (void *) before, (void *) limit);
     }
     return result;
-}
-
-void __real_glDrawElements(GLenum mode, GLsizei count, GLenum type,
-                           const GLvoid *indices);
-
-void __wrap_glDrawElements(GLenum mode, GLsizei count, GLenum type,
-                           const GLvoid *indices) {
-    int traced = 0;
-    if (stsv_city_draw_tracking) {
-        stsv_city_draw_seq++;
-        traced = stsv_city_draw_seq <= 24;
-    }
-    stsv_current_draw_mode = mode;
-    stsv_current_draw_count = count;
-    stsv_current_draw_type = type;
-    stsv_current_draw_indices = indices;
-    if (traced) {
-        fprintf(stderr,
-                "[act2-diag] city-draw seq=%d mode=0x%x count=%d "
-                "type=0x%x indices=%p\n",
-                stsv_city_draw_seq, (unsigned int) mode, (int) count,
-                (unsigned int) type, indices);
-        if (stsv_city_draw_seq == 1) {
-            stsv_diag_memory("city-first-draw");
-        }
-    }
-    stsv_trace_current_draw = traced;
-    __real_glDrawElements(mode, count, type, indices);
-    stsv_trace_current_draw = 0;
-    if (stsv_city_draw_seq >= 24) {
-        stsv_city_draw_tracking = 0;
-    }
 }
 #endif
 
 #if !defined(__vita__) && !defined(VITA)
 /* Host: pools are unbounded, spilling never happens, everything fits. */
 void stsv_tex_spill_enable(void) {
-}
-
-void stsv_transition_diag(const void *utf8, int32_t len) {
-    (void) utf8;
-    (void) len;
 }
 
 int32_t stsv_tex_would_fit(int32_t need) {
@@ -515,12 +347,6 @@ void stsv_tex_image_rgba(int target, int level, int width, int height, const voi
         glTexImage2D((GLenum) target, level, GL_RGBA, width, height, 0,
                      GL_RGBA, GL_UNSIGNED_BYTE, rgba);
         stsv_upload_time(up_t0);
-        static int page_reup_logs;
-        if (page_reup_logs < 32) {
-            page_reup_logs++;
-            fprintf(stderr, "[DIAG subtex] PAGE-reupload id=%d %dx%d kept-rgba\n",
-                    bound_id, width, height);
-        }
         return;
     }
     if (width >= 256 && height >= 256 && (width & 3) == 0 && (height & 3) == 0) {
@@ -552,15 +378,6 @@ void stsv_tex_image_rgba(int target, int level, int width, int height, const voi
             stsv_upload_time(up_t0);
             if (level == 0) {
                 stsv_mark_glyph_page(bound_id);
-            }
-            /* Glyph-page creation trace (pairs with [DIAG subtex]). */
-            static int page_logs;
-            if (page_logs < 32) {
-                page_logs++;
-                fprintf(stderr,
-                        "[DIAG subtex] PAGE-upload id=%d %dx%d transparent=%d%%\n",
-                        bound_id, width, height,
-                        (int) (transparent * 100 / npx));
             }
             return;
         }
@@ -620,12 +437,12 @@ void stsv_tex_image_compressed(int target, int level, int internal_format,
     /* Redefinition clears any stale compressed mark on a recycled id; the
      * successful upload below re-marks. The 4x4-blank drop paths then leave
      * the texture correctly unmarked (they are plain RGBA). A recycled
-     * glyph-page id redefined from a.dds is no longer a glyph page. */
+     * glyph-page id redefined from a .dds is no longer a glyph page. */
     stsv_unmark_compressed(stsv_bound_tex());
     stsv_unmark_glyph_page(stsv_bound_tex());
 #endif
     /* width/height are the LOGICAL dimensions (what the game's layout/UV math
-     * sees via texture.getWidth()). Reduced-data.dds files keep the original
+     * sees via texture.getWidth()). Reduced-data .dds files keep the original
      * dims in their header but carry blocks for half- or quarter-size uploads;
      * infer the actual upload dims from image_size. A size that matches none
      * of those encodings is the skip-read stub (bare 128B header,
@@ -699,19 +516,8 @@ int64_t stsv_subtex_frame_stats(void) {
 void stsv_tex_sub_image_rgba(int target, int level, int xoff, int yoff,
                              int width, int height, const void *rgba) {
 #if defined(__vita__) || defined(VITA)
-    /* Bounded glyph-subtex trace: glyph METRICS
-     * are proven healthy on device, so either sub-uploads die GPU-side or
-     * they never happen. Log every skip, every GL error, and the first 96
-     * calls (id + rect), so the next device log shows exactly which glyph
-     * pixels reached vitaGL. */
-    static int subtex_logs;
     int id = stsv_bound_tex();
     if (stsv_is_compressed(id)) {
-        if (subtex_logs < 192) {
-            subtex_logs++;
-            fprintf(stderr, "[DIAG subtex] SKIP-marked id=%d %dx%d at %d,%d\n",
-                    id, width, height, xoff, yoff);
-        }
         return;
     }
     while (glGetError() != GL_NO_ERROR) { /* drain stale */ }
@@ -722,12 +528,7 @@ void stsv_tex_sub_image_rgba(int target, int level, int xoff, int yoff,
     stsv_subtex_us_accum += stsv_wall_us() - t0;
     stsv_subtex_calls_accum++;
 #if defined(__vita__) || defined(VITA)
-    GLenum err = glGetError();
-    if (subtex_logs < 96 || (err != GL_NO_ERROR && subtex_logs < 192)) {
-        subtex_logs++;
-        fprintf(stderr, "[DIAG subtex] id=%d %dx%d at %d,%d err=0x%04x\n",
-                id, width, height, xoff, yoff, (unsigned) err);
-    }
+    while (glGetError() != GL_NO_ERROR) {}
 #endif
 }
 

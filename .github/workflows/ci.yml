@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: make test
+      - run: shellcheck build.sh docker/entrypoint.sh
+
+  launcher:
+    runs-on: ubuntu-24.04
+    container: vitasdk/vitasdk:2026.08-20261123@sha256:579c6e00c5142fb59c980b6476f6120da54ee1ac832e973e60a43579153d4d4b
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - run: make launcher
+        env:
+          VITASDK: /usr/local/vitasdk
+      - run: python3 tools/check_release.py --vpk build/STSPSVITA.vpk --elf build/launcher/launcher

@@ -62,28 +62,17 @@ public final class VitaNatives {
     public static native long uploadFrameStats();
 
     /** Read-only guard preview: would a texture of this byte size be admitted
-     * right now? Lets VitaFileHandle skip the SD read of a doomed.dds. */
+     * right now? Lets VitaFileHandle skip the SD read of a doomed .dds. */
     @Import(name = "stsv_tex_would_fit")
     public static native int texWouldFit(int need);
 
     @Import(name = "stsv_tex_note_path")
     private static native void nTexNotePath(org.teavm.interop.Address utf8, int len);
 
-    /** Names the next texture upload in the [DIAG dxt] SKIP/SPILL lines. */
+    /** Names the next texture upload in the [tex] SKIP/SPILL lines. */
     public static void texNotePath(String path) {
         byte[] utf8 = path.getBytes();
         nTexNotePath(org.teavm.interop.Address.ofData(utf8), utf8.length);
-    }
-
-    @Import(name = "stsv_transition_diag")
-    private static native void nTransitionDiag(org.teavm.interop.Address utf8, int len);
-
-    /** Crash-safe Act-transition marker with native pool/heap context. */
-    public static void transitionDiag(String label) {
-        // Preserve the ordinary INFO context before the native stderr marker.
-        System.out.flush();
-        byte[] utf8 = label.getBytes();
-        nTransitionDiag(org.teavm.interop.Address.ofData(utf8), utf8.length);
     }
 
     /* --- on-screen keyboard (glue/ime_glue.c; host stubs report failure) --- */

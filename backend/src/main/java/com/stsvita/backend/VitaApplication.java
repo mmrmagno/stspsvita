@@ -13,7 +13,6 @@ import com.badlogic.gdx.Net;
 import com.badlogic.gdx.Preferences;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Clipboard;
-import com.badlogic.gdx.graphics.g2d.Gdx2DPixmap;
 
 /**
  * libGDX 1.9.5 Application for the PS Vita.
@@ -65,7 +64,6 @@ public class VitaApplication implements Application {
     private void mainLoop() {
         graphics.init();
         listener.create();
-        Gdx2DPixmap.dumpStats("after-create");
         // The GL viewport is owned by the backend, exactly as LWJGL does in
         // its mainLoop (glViewport then resize): StS's create() calls
         // FitViewport.apply() before the viewport is ever update()d, leaving a

@@ -10,7 +10,7 @@ from pathlib import Path
 JAR_NAME = "desktop-1.0.jar"
 
 # Known-good jars this pipeline has been developed against.
-# Other builds usually work; verify.py warns rather than refuses.
+# verify.py refuses anything else unless --allow-unknown is passed.
 KNOWN_JARS = {
     # sha256 -> human-readable description; extended as contributors report
     # fingerprints from other platforms/storefronts
@@ -48,7 +48,7 @@ DEFAULT_LANGS = "eng"
 
 def find_jar(sts_dir: Path) -> Path:
     # The public build interface accepts either the installation directory or
-    # the jar itself. Keeping this normalization here means verify/extract and
+    # the jar itself.  Keeping this normalization here means verify/extract and
     # every Make-based entry point resolve the exact same input.
     jar = sts_dir if sts_dir.is_file() else sts_dir / JAR_NAME
     if not jar.is_file():

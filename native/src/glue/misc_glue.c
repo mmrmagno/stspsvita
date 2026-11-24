@@ -1,4 +1,5 @@
 #include "stsv_misc.h"
+#include "heap_probe.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -64,16 +65,15 @@ void *stsv_img_load(const void *data, int32_t len, int32_t *outDims) {
         /* largest contiguous block we can still grab */
         size_t probe = 0;
         for (size_t t = 64u << 20; t >= (1u << 20); t >>= 1) {
-            void *m = malloc(t);
-            if (m) { free(m); probe = t; break; }
+            if (stsv_heap_can_alloc(t)) { probe = t; break; }
         }
         fprintf(stderr,
-            "[DIAG stb] decode FAILED reason=%s | heap arena=%dMB used=%dMB free=%dMB largestmalloc=%dMB\n",
+            "[img] decode FAILED reason=%s | heap arena=%dMB used=%dMB free=%dMB largestmalloc=%dMB\n",
             stbi_failure_reason(), mi.arena >> 20, mi.uordblks >> 20,
             mi.fordblks >> 20, (int) (probe >> 20));
 #if defined(__vita__) || defined(VITA)
         fprintf(stderr,
-            "[DIAG vgl] VRAM used=%dMB/%dMB  RAM used=%dMB/%dMB  PHYCONT used=%dMB/%dMB  EXTERNAL(newlib) used=%dMB\n",
+            "[img] VRAM used=%dMB/%dMB  RAM used=%dMB/%dMB  PHYCONT used=%dMB/%dMB  EXTERNAL(newlib) used=%dMB\n",
             (int) ((vglMemTotal(VGL_MEM_VRAM) - vglMemFree(VGL_MEM_VRAM)) >> 20),
             (int) (vglMemTotal(VGL_MEM_VRAM) >> 20),
             (int) ((vglMemTotal(VGL_MEM_RAM) - vglMemFree(VGL_MEM_RAM)) >> 20),

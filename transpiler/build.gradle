@@ -1,8 +1,9 @@
 // TeaVM AOT harness: compiles the Vita backend + launcher against the API of
 // the user's own jar, then (task `transpile`) runs TeaVM's C backend over
 // stubs -> backend -> user jar to emit work/generated_c/.
+//
 // The user's jar never leaves the machine and nothing derived from it is
-// written inside the repo tree (all outputs go to../work).
+// written inside the repo tree (all outputs go to ../work).
 
 plugins {
     id 'java'
@@ -51,7 +52,7 @@ compileJava.dependsOn 'typeManifest'
 processResources.dependsOn 'typeManifest'
 
 // TeaVM version is pinned: the C backend moves fast and we vendor patches
-// against exactly this release (see../teavm-patches).
+// against exactly this release (tools/vita_patch_runtime.py).
 def teavmVersion = '0.15.0'
 
 dependencies {
@@ -74,6 +75,11 @@ dependencies {
     }
 }
 
+tasks.register('resolveDeps') {
+    def jars = files(configurations.runtimeClasspath, configurations.compileClasspath)
+    doLast { jars.files.size() }
+}
+
 tasks.register('transpile', JavaExec) {
     group = 'stsvita'
     description = 'Run TeaVM C backend over stubs + backend + the user jar'
@@ -83,6 +89,8 @@ tasks.register('transpile', JavaExec) {
     args = [stsJar, "${workDir}/generated_c"]
     // TeaVM whole-program analysis over ~7k classes is memory-hungry
     maxHeapSize = '4g'
+    // TeaVM orders some output by identity hash; a constant keeps builds reproducible
+    jvmArgs '-XX:+UnlockExperimentalVMOptions', '-XX:hashCode=2'
     // Patch the freshly generated C for the Vita target right after transpiling.
     finalizedBy 'vitaPatchRuntime'
 }

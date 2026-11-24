@@ -1,5 +1,6 @@
 package com.stsvita.backend;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Net;
 import com.badlogic.gdx.net.ServerSocket;
 import com.badlogic.gdx.net.ServerSocketHints;
@@ -16,7 +17,8 @@ public class VitaNet implements Net {
     @Override
     public void sendHttpRequest(HttpRequest httpRequest, HttpResponseListener httpResponseListener) {
         if (httpResponseListener != null) {
-            httpResponseListener.failed(new UnsupportedOperationException("no network on Vita build"));
+            Gdx.app.postRunnable(() -> httpResponseListener.failed(
+                    new UnsupportedOperationException("no network on Vita build")));
         }
     }
 

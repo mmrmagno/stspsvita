@@ -83,7 +83,7 @@ static int stsv_ogg_seek(void *ds, ogg_int64_t off, int whence) {
 static long stsv_ogg_tell(void *ds) { return (long) ((stsv_ogg_mem *) ds)->pos; }
 
 /* Minimal RIFF/WAVE PCM16 loader: a handful of StS UI SFX
- * (SOTE_SFX_UIHover/UIClick) are.wav, not.ogg. Returns AL buffer or 0. */
+ * (SOTE_SFX_UIHover/UIClick) are .wav, not .ogg. Returns AL buffer or 0. */
 static int stsv_load_wav(const unsigned char *d, int len) {
     if (len < 44 || memcmp(d, "RIFF", 4) != 0 || memcmp(d + 8, "WAVE", 4) != 0) {
         return 0;
@@ -132,7 +132,7 @@ static int stsv_load_wav(const unsigned char *d, int len) {
     return (int) buffer;
 }
 
-/* Decode a whole.ogg (encoded bytes at data/len) into a new AL buffer. Returns
+/* Decode a whole .ogg (encoded bytes at data/len) into a new AL buffer. Returns
  * the buffer name (>0) or 0 on failure. Used for short SFX. */
 int stsv_sound_load(const void *data, int len) {
     if (!g_ready || data == NULL || len <= 0) {

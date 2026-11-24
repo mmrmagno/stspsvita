@@ -1,5 +1,6 @@
 package com.badlogic.gdx.utils;
 
+import com.badlogic.gdx.Net;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.math.Rectangle;
@@ -29,6 +30,7 @@ public class ReflectionPool<T> extends Pool<T> {
                 GlyphLayout.GlyphRun::new);
         FACTORIES.put("com.badlogic.gdx.math.Rectangle", Rectangle::new);
         FACTORIES.put("com.badlogic.gdx.graphics.Color", Color::new);
+        FACTORIES.put("com.badlogic.gdx.Net$HttpRequest", Net.HttpRequest::new);
     }
 
     private final Factory factory;

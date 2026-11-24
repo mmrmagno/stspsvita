@@ -8,6 +8,7 @@ STS_INPUT=
 LANGS=eng
 AUDIO_KBPS=32
 INCREMENTAL=0
+OUT=out
 ALLOW_UNSUPPORTED=0
 
 usage() {
@@ -20,6 +21,7 @@ Build a clean, validated full VPK, slim VPK, external asset tree, and manifest.
 Options:
   --langs <list>       Comma-separated game languages to retain (default: eng)
   --audio-kbps <rate>  Re-encode OGG audio (default: 32 at 24kHz; 48 for higher fidelity; 0 copies unchanged)
+  --out <dir>          Where to put the files for the Vita (default: out)
   --incremental        Reuse assets/generated C and rebuild only the slim VPK
   --allow-unsupported-input
                        Contributor-only override for an unknown jar fingerprint
@@ -51,6 +53,11 @@ while (($#)); do
         --audio-kbps)
             (($# >= 2)) || die "--audio-kbps needs a non-negative integer"
             AUDIO_KBPS=$2
+            shift 2
+            ;;
+        --out)
+            (($# >= 2)) || die "--out needs a directory"
+            OUT=$2
             shift 2
             ;;
         --incremental)
@@ -102,7 +109,7 @@ cmake --version >/dev/null || die "CMake is installed but could not start"
 magick -version >/dev/null || die "ImageMagick is installed but could not start"
 arm-vita-eabi-gcc --version >/dev/null || die "VitaSDK compiler could not start"
 
-MAKE_ARGS=("STS_DIR=$STS_INPUT" "LANGS=$LANGS" "AUDIO_KBPS=$AUDIO_KBPS")
+MAKE_ARGS=("STS_DIR=$STS_INPUT" "LANGS=$LANGS" "AUDIO_KBPS=$AUDIO_KBPS" "OUT=$OUT")
 if ((ALLOW_UNSUPPORTED)); then
     MAKE_ARGS+=("ALLOW_UNSUPPORTED=1")
 fi

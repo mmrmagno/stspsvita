@@ -3,7 +3,7 @@
 
 TeaVM 0.15.0's C runtime carries homebrew-console paths behind `#if TEAVM_PSP`
 (malloc heap instead of mmap, setjmp fibers, mktime instead of timegm,
-sceKernelLibcTime clock) — see teavm-patches/README.md. The Vita needs the
+sceKernelLibcTime clock). The Vita needs the
 exact same paths, so this activates them whenever TEAVM_VITA is defined (the
 CMake build passes -DTEAVM_VITA=1) and fixes the handful of PSP-only APIs that
 differ on the Vita (the pspkernel.h include -> psp2 threadmgr).
@@ -86,7 +86,7 @@ def patch_uchar(path: Path) -> bool:
 
 MBPATH_HELPER = '''
 /* STSVITA: TeaVM's C VFS treats any path not starting with '/' as relative and
- * prepends getcwd(), which mangles Vita "drive:" paths (ux0:, app0:,...) into
+ * prepends getcwd(), which mangles Vita "drive:" paths (ux0:, app0:, ...) into
  * invalid doubled paths like "ux0:/data/stsvita/ux0:data/.../foo". Recover the
  * intended path by cutting back to the LAST drive prefix; genuinely cwd-
  * relative paths (one drive colon, at the front) are left unchanged. */

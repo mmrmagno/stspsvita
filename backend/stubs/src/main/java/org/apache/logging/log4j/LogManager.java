@@ -1,7 +1,5 @@
 package org.apache.logging.log4j;
 
-import com.stsvita.backend.VitaNatives;
-
 /** Shadow of log4j-api LogManager: loggers print straight to stdout. */
 public final class LogManager {
 
@@ -33,7 +31,6 @@ public final class LogManager {
 class StdoutLogger implements Logger {
 
     private final String tag;
-    private static boolean cityTransition;
 
     StdoutLogger(String tag) {
         this.tag = tag;
@@ -48,36 +45,11 @@ class StdoutLogger implements Logger {
             return;
         }
         String line = level + " " + tag + "> " + message;
-        transitionBoundary(message);
         if ("WARN".equals(level) || "ERROR".equals(level) || "FATAL".equals(level)) {
             System.out.flush();
             System.err.println(line);
         } else {
             System.out.println(line);
-        }
-    }
-
-    /** Keep only the boundaries needed to reconstruct Act 1 -> City. */
-    private void transitionBoundary(String message) {
-        if ("MusicMaster".equals(tag)
-                && message.startsWith("Playing STS_BossVictoryStinger")) {
-            VitaNatives.transitionDiag("act1-complete boss-victory");
-            return;
-        }
-        if ("AbstractDungeon".equals(tag) && message.startsWith("[BOSS] Automaton")) {
-            cityTransition = true;
-            VitaNatives.transitionDiag("city-constructor boss=Automaton");
-            return;
-        }
-        if (!cityTransition || !"AbstractDungeon".equals(tag)) {
-            return;
-        }
-        if (message.startsWith("Content generation time:")) {
-            VitaNatives.transitionDiag("city-content-generation-complete");
-        } else if (message.startsWith("Generating Room Types!")) {
-            VitaNatives.transitionDiag("city-map-generation-begin");
-        } else if (message.startsWith("Map generation time:")) {
-            VitaNatives.transitionDiag("city-map-generation-complete");
         }
     }
 

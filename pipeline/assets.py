@@ -10,7 +10,7 @@ What it does:
 Texture DIMENSIONS as seen by the game are never changed: Slay the Spire
 mixes draws sized from atlas regions / texel srcRects with draws sized from
 constants * Settings.scale, so naive rescaling breaks layout. The half-res
-.dds half-res pass is safe because the.dds header keeps the
+.dds half-res pass is safe because the .dds header keeps the
 ORIGINAL dims — texture.getWidth() and every UV fraction stay identical —
 and only the encoded block data is half size (the upload glue infers the
 actual GPU dims from the data size). GPU memory is otherwise reclaimed by
@@ -34,8 +34,7 @@ from stsvita_common import CJK_FONT_DIRS, DEFAULT_LANGS, sha256_file
 
 
 # libvorbis refuses managed bitrates below ~45kbps at 44.1kHz stereo
-# ("encoder setup failed"). The
-# 32kbps profile therefore resamples to 24kHz, which the encoder accepts
+# ("encoder setup failed"). The 32kbps profile therefore resamples to 24kHz, which the encoder accepts
 # and which also halves the decoded PCM size of every preloaded SFX in
 # OpenAL's native-heap buffers. 48kbps stays at the source rate.
 VORBIS_RATE_FLOOR_KBPS = ((44100, 45), (32000, 36), (24000, 30), (16000, 24))
@@ -49,7 +48,7 @@ def encode_args(kbps: int) -> list[str]:
             if rate != VORBIS_RATE_FLOOR_KBPS[0][0]:
                 args += ["-ar", str(rate)]
             break
-    return args + ["-b:a", f"{kbps}k"]
+    return args + ["-b:a", f"{kbps}k", "-flags:a", "+bitexact", "-fflags", "+bitexact"]
 
 
 def check_audio_encoder(kbps: int) -> None:
@@ -115,13 +114,13 @@ def build_dds_encoder(work: Path) -> Path:
     return exe
 
 
-# Half-res.dds: StS art is authored for 1920x1080 and the
+# Half-res .dds: StS art is authored for 1920x1080 and the
 # Vita renders 960x544 with Settings.scale = 0.5, so every draw lands at half
 # the authored pixel size — half-res data IS native resolution on screen. The
-#.dds header keeps the ORIGINAL (logical) dims — the game's layout/UV/srcRect
+# .dds header keeps the ORIGINAL (logical) dims, the game's layout/UV/srcRect
 # math reads them via texture.getWidth() — while the encoded blocks are half
 # size; stsv_tex_image_compressed infers the actual upload dims from the data
-# size.;
+# size;
 # now applied to EVERYTHING /8-dimensioned (ddsenc -2 falls back to full-res
 # otherwise). This is what lets the boot preload (cards/cardui/ui/title,
 # ~130MB at full res) fit the vitaGL pools instead of dropping the late
@@ -140,7 +139,7 @@ def dds_path_for(img: Path) -> Path:
     the same size as scene2.jpg). With a shared <stem>.dds the jpg encode
     overwrote the png's, so every region on a png page sampled the jpg's
     pixels — the 'mosaic of different places' backgrounds seen on device
-    2026-07-12 once half-res let those pages actually upload.
+    once half-res let those pages actually upload.
     """
     if img.suffix == ".jpg":
         return img.parent / (img.name + ".dds")
@@ -148,7 +147,7 @@ def dds_path_for(img: Path) -> Path:
 
 
 # Atlases whose REGION draws render blank at half-res on the Vita GXM
-#: card frames/banners (cardui), the small
+# card frames/banners (cardui), the small
 # card-art atlas (cards), and all combat/particle VFX (vfx). The atlas TEXTURE
 # uploads and samples fine at half-res (the cardui CARD_BACK pile icon and the
 # 2048 half-res title.atlas both render) — but the specific SpriteBatch draws
@@ -256,7 +255,7 @@ def next_pot(n: int) -> int:
 
 
 def pad_npot_atlas_pages(dst_root: Path, jobs: int) -> list[Path]:
-    """Pad every non-power-of-two.atlas page to POT dimensions.
+    """Pad every non-power-of-two .atlas page to POT dimensions.
 
     The Vita GPU (GXM) mangles NPOT texture sampling — the Ironclad's
     611x113 page rendered him tiny/garbled until padded to 1024x128. Regions use absolute pixel coords
@@ -303,9 +302,9 @@ def pad_npot_atlas_pages(dst_root: Path, jobs: int) -> list[Path]:
 
 
 def stub_dds_bytes() -> bytes:
-    """A 4x4 fully-transparent DXT1.dds (128B header + one 8B block).
+    """A 4x4 fully-transparent DXT1 .dds (128B header + one 8B block).
 
-    Matches the stub that was hand-uploaded to the device on 2026-07-11:
+    Matches the stub that was hand-uploaded to the device:
     oldCards atlas pages (~20MB, legacy card art the game never draws) are
     replaced with this to reclaim VRAM headroom on the Vita.
     """
@@ -418,7 +417,7 @@ def main() -> int:
             sys.exit("error: DDS generation needs gcc on PATH")
         ddsenc = build_dds_encoder(args.work)
         padded_set = set(padded)
-        # JPGs too: scene/menu/event art ships as.jpg (blueBg.jpg is the main
+        # JPGs too: scene/menu/event art ships as .jpg (blueBg.jpg is the main
         # menu sky). Undecoded they cost seconds of stb decode on the 444MHz
         # CPU (the 40s "New Main Menu Screen" stall) plus a 9MB RGBA upload.
         images = sorted(dst_root.rglob("*.png")) + sorted(dst_root.rglob("*.jpg"))
@@ -443,8 +442,8 @@ def main() -> int:
 
     pruned = 0
     if not args.no_dds:
-        # A.png/.jpg with a.dds sibling is dead weight: VitaFileHandle (and
-        # the host harness) always prefer the.dds. Dropping them keeps the
+        # A .png/.jpg with a .dds sibling is dead weight: VitaFileHandle (and
+        # the host harness) always prefer the .dds. Dropping them keeps the
         # payload (and the memory card) hundreds of MB smaller.
         for ext in ("*.png", "*.jpg"):
             for img in list(dst_root.rglob(ext)):
