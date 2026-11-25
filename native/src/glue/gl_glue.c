@@ -1,5 +1,5 @@
 /* Functions @Import-ed by the Java backend (see VitaNatives.java).
- * Keep names in sync — TeaVM resolves them at native link time. */
+ * Keep names in sync - TeaVM resolves them at native link time. */
 
 #include "stsvita_glue.h"
 
@@ -102,7 +102,7 @@ void stsv_swap_buffers(void) {
 
 void stsv_set_vsync(int on) {
     vsync_on = on;
-    /* vitaGL swap interval control lands with the M3 graphics work. */
+    /* Stored only, vitaGL keeps its own swap interval. */
 }
 
 int32_t stsv_is_host_harness(void) {

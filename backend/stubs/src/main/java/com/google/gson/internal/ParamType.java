@@ -4,7 +4,7 @@ import java.lang.reflect.Type;
 
 /**
  * Minimal parameterized-type value for the gson facade. We avoid
- * java.lang.reflect.ParameterizedType — its surface drags in more of
+ * java.lang.reflect.ParameterizedType - its surface drags in more of
  * java.lang.reflect than TeaVM's C backend provides; the facade only needs
  * raw + args, and the build-time TypeManifest constructs these directly.
  */

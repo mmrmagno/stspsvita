@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Validate canonical STSVITA outputs and emit build/build-manifest.json."""
+"""Validate canonical STSPSVITA outputs and emit build/build-manifest.json."""
 
 from __future__ import annotations
 
 import argparse
-import binascii
 import collections
 import datetime as dt
 import hashlib
@@ -12,25 +11,12 @@ import json
 import os
 import subprocess
 import sys
-import zipfile
 from pathlib import Path, PurePosixPath
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "pipeline"))
 
 from stsvita_common import KNOWN_JARS, find_jar, sha256_file  # noqa: E402
-
-
-REQUIRED_VPK_FILES = {
-    "eboot.bin",
-    "loading.png",
-    "sce_sys/param.sfo",
-    "sce_sys/icon0.png",
-    "sce_sys/livearea/contents/bg0.png",
-    "sce_sys/livearea/contents/startup.png",
-    "sce_sys/livearea/contents/loading.png",
-    "sce_sys/livearea/contents/template.xml",
-}
 
 
 class ValidationError(RuntimeError):
@@ -56,14 +42,6 @@ def first_line(text: str) -> str:
 def version_line(text: str, prefix: str) -> str:
     return next((line.strip() for line in text.splitlines()
                  if line.strip().startswith(prefix)), first_line(text))
-
-
-def file_crc32(path: Path) -> int:
-    value = 0
-    with path.open("rb") as src:
-        for chunk in iter(lambda: src.read(1 << 20), b""):
-            value = binascii.crc32(chunk, value)
-    return value & 0xFFFFFFFF
 
 
 def asset_inventory(root: Path) -> tuple[dict[str, Path], dict[str, object]]:
@@ -114,34 +92,6 @@ def asset_inventory(root: Path) -> tuple[dict[str, Path], dict[str, object]]:
         "tree_sha256": tree_hash.hexdigest(),
         "png_dds_sibling_policy": "passed",
     }
-
-
-def read_vpk(path: Path) -> tuple[zipfile.ZipFile, dict[str, zipfile.ZipInfo]]:
-    if not path.is_file():
-        raise ValidationError(f"missing package: {path}")
-    try:
-        archive = zipfile.ZipFile(path)
-        infos = archive.infolist()
-        bad = archive.testzip()
-    except (OSError, zipfile.BadZipFile) as exc:
-        raise ValidationError(f"unreadable VPK {path}: {exc}") from exc
-    if bad:
-        archive.close()
-        raise ValidationError(f"VPK CRC failure in {path}: {bad}")
-    names = [info.filename for info in infos]
-    if len(names) != len(set(names)):
-        archive.close()
-        raise ValidationError(f"duplicate archive entries in {path}")
-    return archive, {info.filename: info for info in infos}
-
-
-def validate_required(path: Path, infos: dict[str, zipfile.ZipInfo]) -> None:
-    missing = sorted(REQUIRED_VPK_FILES - set(infos))
-    if missing:
-        raise ValidationError(f"{path} lacks required files: {missing}")
-    for name in REQUIRED_VPK_FILES:
-        if infos[name].file_size == 0:
-            raise ValidationError(f"{path} contains empty required file: {name}")
 
 
 def newest_mtime(paths: list[Path]) -> float:
@@ -237,9 +187,8 @@ def validate_generated_inputs(work: Path, jar: Path, jar_hash: str, assets: Path
     if cache.is_file():
         cache_text = cache.read_text(errors="replace")
         expected_generated = f"GENERATED_C:PATH={generated.resolve()}"
-        expected_assets = f"ASSETS:PATH={assets.resolve()}"
-        if expected_generated not in cache_text or expected_assets not in cache_text:
-            raise ValidationError("native CMake cache points at stale generated-C/assets paths")
+        if expected_generated not in cache_text:
+            raise ValidationError("native CMake cache points at stale generated-C paths")
 
     tracked = run_text("git", "ls-files", "--", "work", "build")
     if tracked and not tracked.startswith("unavailable"):
@@ -268,7 +217,6 @@ def main() -> int:
     ap.add_argument("--build", type=Path, default=Path("build"))
     ap.add_argument("--langs", default="eng")
     ap.add_argument("--audio-kbps", type=int, default=32)
-    ap.add_argument("--slim-only", action="store_true")
     args = ap.parse_args()
 
     work = args.work.resolve()
@@ -282,68 +230,10 @@ def main() -> int:
         staged, asset_stats = asset_inventory(assets)
         validate_generated_inputs(work, jar, jar_hash, assets, langs, args.audio_kbps)
 
-        slim_path = build / "STSVITA-slim.vpk"
-        slim, slim_infos = read_vpk(slim_path)
-        try:
-            validate_required(slim_path, slim_infos)
-            bundled_in_slim = sorted(n for n in slim_infos if n.startswith("assets/"))
-            if bundled_in_slim:
-                raise ValidationError(
-                    f"slim package unexpectedly bundles assets: {bundled_in_slim[:8]}"
-                )
-            slim_eboot = slim.read("eboot.bin")
-        finally:
-            slim.close()
-
-        outputs: dict[str, dict[str, object]] = {
-            "slim_vpk": {
-                "path": str(slim_path.relative_to(REPO)),
-                "bytes": slim_path.stat().st_size,
-                "sha256": sha256_file(slim_path),
-                "entries": len(slim_infos),
-            },
-            "eboot": {
-                "bytes": len(slim_eboot),
-                "sha256": hashlib.sha256(slim_eboot).hexdigest(),
-            },
-        }
-
-        if not args.slim_only:
-            full_path = build / "STSVITA.vpk"
-            full, full_infos = read_vpk(full_path)
-            try:
-                validate_required(full_path, full_infos)
-                expected = {f"assets/{rel}" for rel in staged}
-                actual = {name for name in full_infos
-                          if name.startswith("assets/") and not name.endswith("/")}
-                missing = sorted(expected - actual)
-                extra = sorted(actual - expected)
-                if missing or extra:
-                    raise ValidationError(
-                        "full package asset set differs from staging: "
-                        f"missing={missing[:8]} extra={extra[:8]}"
-                    )
-                for rel, source in staged.items():
-                    info = full_infos[f"assets/{rel}"]
-                    size = source.stat().st_size
-                    if info.file_size != size or info.CRC != file_crc32(source):
-                        raise ValidationError(f"full package asset differs from staging: {rel}")
-                full_eboot = full.read("eboot.bin")
-            finally:
-                full.close()
-            if full_eboot != slim_eboot:
-                raise ValidationError("full and slim packages use different eboot.bin bytes")
-            outputs["full_vpk"] = {
-                "path": str(full_path.relative_to(REPO)),
-                "bytes": full_path.stat().st_size,
-                "sha256": sha256_file(full_path),
-                "entries": len(full_infos),
-                "staged_assets_verified": len(staged),
-            }
-
-        native_eboot = build / "native/eboot.bin"
-        if native_eboot.is_file() and sha256_file(native_eboot) != outputs["eboot"]["sha256"]:
-            raise ValidationError("packaged executable differs from build/native/eboot.bin")
+        eboot = build / "native/eboot.bin"
+        if not eboot.is_file() or eboot.read_bytes()[:4] != b"SCE\0":
+            raise ValidationError(f"missing or invalid executable: {eboot}")
+        outputs = {"eboot": {"bytes": eboot.stat().st_size, "sha256": sha256_file(eboot)}}
 
         pinned = os.environ.get("STSV_REVISION", "")
         revision = pinned or run_text("git", "rev-parse", "HEAD")
@@ -359,7 +249,6 @@ def main() -> int:
             "schema_version": 1,
             "build_id": build_id,
             "generated_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
-            "mode": "incremental-slim" if args.slim_only else "clean-release",
             "repository": {
                 "revision": revision,
                 "dirty": bool(dirty_paths),
@@ -380,11 +269,6 @@ def main() -> int:
             "assets": asset_stats,
             "outputs": outputs,
             "validation": {
-                "archives_readable": True,
-                "required_files": True,
-                "full_assets_match_staging": None if args.slim_only else True,
-                "slim_excludes_assets": True,
-                "identical_executable": None if args.slim_only else True,
                 "generated_outputs": True,
                 "tracked_game_content": False,
             },
@@ -398,8 +282,7 @@ def main() -> int:
         print(f"validate: ERROR: {exc}", file=sys.stderr)
         return 1
 
-    print(f"validate: OK ({'slim' if args.slim_only else 'full + slim'}, "
-          f"{asset_stats['files']} staged assets)")
+    print(f"validate: OK ({asset_stats['files']} assets)")
     print(f"manifest: {manifest_path} (build_id {build_id})")
     return 0
 

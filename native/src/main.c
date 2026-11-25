@@ -11,7 +11,7 @@
  * by TEAVM_PSP virtualAlloc=malloc) + native malloc (stb decode + FreeType)
  * + the free space vitaGL falls back to for PER-DRAW vertex buffers.
  * 240MB: shrunk in lockstep with the Java heap (144->112MB,
- * BuildVita.java), so the NATIVE budget is unchanged at 128MB — this is NOT
+ * BuildVita.java), so the NATIVE budget is unchanged at 128MB - this is NOT
  * a repeat of the unsafe 260MB experiment, which cut native. The 32MB of
  * USER_RW released here goes to vglInitExtended's carved RAM texture pool
  * (45->77MB). Device evidence for why: by

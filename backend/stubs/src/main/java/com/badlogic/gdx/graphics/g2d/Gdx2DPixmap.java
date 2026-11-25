@@ -85,7 +85,7 @@ public class Gdx2DPixmap implements Disposable {
             // Decode failed (typically a transient OOM under Vita's tight
             // texture budget). Rather than abort the whole game, fall back to a
             // blank transparent pixmap at the PNG's true dimensions (from the
-            // IHDR) so atlas region coordinates stay valid — the art is just
+            // IHDR) so atlas region coordinates stay valid - the art is just
             // missing, not garbled, and startup can continue to the menu.
             failureReason = "stb_image failed to decode " + len + " bytes";
             int w = pngUint(encodedData, offset + 16);

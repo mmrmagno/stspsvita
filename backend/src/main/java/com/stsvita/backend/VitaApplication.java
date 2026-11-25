@@ -73,7 +73,7 @@ public class VitaApplication implements Application {
         listener.resize(graphics.getWidth(), graphics.getHeight());
         // Boot preload is done and the native working set is stable: from here
         // on, textures that no vitaGL pool can hold may spill (bounded) into
-        // newlib instead of being dropped blank — that covers the mid-run
+        // newlib instead of being dropped blank - that covers the mid-run
         // loads the player actually sees (boss atlases, scene backgrounds).
         VitaNatives.texSpillEnable();
 

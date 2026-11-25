@@ -1,9 +1,9 @@
-## VPK build: TeaVM-generated C + glue -> eboot.bin -> STSVITA.vpk
+## Game build: TeaVM-generated C + glue -> eboot.bin, staged as game.bin
 ##
 ## Usage (driven by the top-level Makefile):
 ##   cmake -S native -B build/native \
 ##         -DCMAKE_TOOLCHAIN_FILE=$VITASDK/share/vita.toolchain.cmake \
-##         -DGENERATED_C=work/generated_c -DASSETS=work/assets_vita
+##         -DGENERATED_C=work/generated_c
 cmake_minimum_required(VERSION 3.16)
 
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE AND DEFINED ENV{VITASDK})
@@ -13,21 +13,10 @@ endif()
 project(STSVITA C)
 include("${VITASDK}/share/vita.cmake" REQUIRED)
 
-set(VITA_APP_NAME "Slay the Spire")
-set(VITA_TITLEID  "STSV00001")
-set(VITA_VERSION  "00.10")
-# ATTRIBUTE2=12 -> enlarged memory mode (~365MB app budget)
-set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d ATTRIBUTE2=12")
-
 set(GENERATED_C "" CACHE PATH "directory of TeaVM-generated C (work/generated_c)")
-set(ASSETS ""      CACHE PATH "processed asset payload (work/assets_vita)")
-# LiveArea/sce_sys payload (icon0.png + livearea/). Generated from the user's
-# game files by pipeline/livearea.py into work/sce_sys; falls back to the repo's
-# native/sce_sys (README only -> default placeholder bubble) when not generated.
-set(SCE_SYS "${CMAKE_CURRENT_SOURCE_DIR}/sce_sys" CACHE PATH "LiveArea/sce_sys directory")
 
 if(NOT GENERATED_C OR NOT EXISTS "${GENERATED_C}")
-  message(FATAL_ERROR "GENERATED_C not set/found — run `make transpile` first")
+  message(FATAL_ERROR "GENERATED_C not set/found - run `make transpile` first")
 endif()
 
 # Compile exactly TeaVM's reachable set (work/generated_c/all.txt), NOT a glob
@@ -71,7 +60,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   "${VITASDK}/arm-vita-eabi/include/freetype2")
 target_compile_options(${PROJECT_NAME} PRIVATE
   -std=gnu11 -D_GNU_SOURCE
-  # SHELL: keeps each "-include <file>" pair intact — without it CMake
+  # SHELL: keeps each "-include <file>" pair intact - without it CMake
   # de-duplicates the repeated -include flag and turns the second header into
   # a stray input file ("cannot specify -o with -c ... with multiple files").
   "SHELL:-include ${GENERATED_C}/uchar.h"
@@ -91,7 +80,7 @@ target_link_options(${PROJECT_NAME} PRIVATE
 
 target_link_libraries(${PROJECT_NAME}
   vitaGL vitashark SceShaccCgExt mathneon SceShaccCg_stub
-  # vitaGL/vitaShark are C++ — pull in the C++ runtime (operator new/delete,
+  # vitaGL/vitaShark are C++ - pull in the C++ runtime (operator new/delete,
   # std::string, exception ABI) they reference.
   stdc++
   # FreeType (glyph rasterization) + its image/compression deps
@@ -113,32 +102,4 @@ target_link_libraries(${PROJECT_NAME}
   pthread m
 )
 
-# Two VPK flavours share one eboot:
-#   BUNDLE_ASSETS=ON  (default) -> full VPK, assets packed at app0:/assets
-#   BUNDLE_ASSETS=OFF           -> slim ~7MB dev VPK; the game then reads assets
-#                                  from ux0:data/stsvita/assets (VitaFiles auto-
-#                                  detects), so reinstalling code is seconds.
-option(BUNDLE_ASSETS "Pack the asset payload into the VPK" ON)
-
-set(VPK_FILES)
-if(BUNDLE_ASSETS)
-  if(NOT ASSETS OR NOT EXISTS "${ASSETS}")
-    message(FATAL_ERROR "BUNDLE_ASSETS is ON but ASSETS not set/found — run `make assets`, or build with -DBUNDLE_ASSETS=OFF")
-  endif()
-  list(APPEND VPK_FILES FILE ${ASSETS} assets)
-endif()
-list(APPEND VPK_FILES FILE ${SCE_SYS} sce_sys)
-# Runtime startup art must live outside sce_sys: the Vita installer owns and
-# filters LiveArea metadata, so unreferenced files in livearea/contents are not
-# guaranteed to be copied into app0. Package a normal root-level copy instead.
-set(LOADING_SCREEN "${SCE_SYS}/livearea/contents/loading.png")
-if(EXISTS "${LOADING_SCREEN}")
-  list(APPEND VPK_FILES FILE "${LOADING_SCREEN}" loading.png)
-endif()
-
 vita_create_self(eboot.bin ${PROJECT_NAME} UNSAFE)
-vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} eboot.bin
-  VERSION ${VITA_VERSION}
-  NAME ${VITA_APP_NAME}
-  ${VPK_FILES}
-)

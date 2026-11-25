@@ -1,4 +1,4 @@
-"""Shared constants and helpers for the STSVITA build pipeline."""
+"""Shared constants and helpers for the STSPSVITA build pipeline."""
 
 from __future__ import annotations
 

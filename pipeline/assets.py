@@ -2,7 +2,7 @@
 """Turn work/assets_raw into the Vita asset payload (work/assets_vita).
 
 What it does:
-  * drops fonts for languages you did not ask for (CJK fonts are 160MB —
+  * drops fonts for languages you did not ask for (CJK fonts are 160MB -
     the single biggest size lever in the whole port)
   * optionally re-encodes OGG audio at a lower bitrate (needs ffmpeg)
   * copies everything else through unchanged
@@ -11,7 +11,7 @@ Texture DIMENSIONS as seen by the game are never changed: Slay the Spire
 mixes draws sized from atlas regions / texel srcRects with draws sized from
 constants * Settings.scale, so naive rescaling breaks layout. The half-res
 .dds half-res pass is safe because the .dds header keeps the
-ORIGINAL dims — texture.getWidth() and every UV fraction stay identical —
+ORIGINAL dims - texture.getWidth() and every UV fraction stay identical -
 and only the encoded block data is half size (the upload glue infers the
 actual GPU dims from the data size). GPU memory is otherwise reclaimed by
 DXT compression at unchanged dimensions.
@@ -116,9 +116,9 @@ def build_dds_encoder(work: Path) -> Path:
 
 # Half-res .dds: StS art is authored for 1920x1080 and the
 # Vita renders 960x544 with Settings.scale = 0.5, so every draw lands at half
-# the authored pixel size — half-res data IS native resolution on screen. The
+# the authored pixel size - half-res data IS native resolution on screen. The
 # .dds header keeps the ORIGINAL (logical) dims, the game's layout/UV/srcRect
-# math reads them via texture.getWidth() — while the encoded blocks are half
+# math reads them via texture.getWidth() - while the encoded blocks are half
 # size; stsv_tex_image_compressed infers the actual upload dims from the data
 # size;
 # now applied to EVERYTHING /8-dimensioned (ddsenc -2 falls back to full-res
@@ -138,7 +138,7 @@ def dds_path_for(img: Path) -> Path:
     carry the alpha overlay layers, and bottomScene/scene2.png is not even
     the same size as scene2.jpg). With a shared <stem>.dds the jpg encode
     overwrote the png's, so every region on a png page sampled the jpg's
-    pixels — the 'mosaic of different places' backgrounds seen on device
+    pixels - the 'mosaic of different places' backgrounds seen on device
     once half-res let those pages actually upload.
     """
     if img.suffix == ".jpg":
@@ -150,7 +150,7 @@ def dds_path_for(img: Path) -> Path:
 # card frames/banners (cardui), the small
 # card-art atlas (cards), and all combat/particle VFX (vfx). The atlas TEXTURE
 # uploads and samples fine at half-res (the cardui CARD_BACK pile icon and the
-# 2048 half-res title.atlas both render) — but the specific SpriteBatch draws
+# 2048 half-res title.atlas both render) - but the specific SpriteBatch draws
 # these use (rotated/scaled TextureRegion draws for frames, additive blends
 # for VFX) come out blank, while standalone-Texture draws, Spine monster
 # atlases, and scene/UI atlases all render correctly at half-res. Root cause
@@ -159,7 +159,7 @@ def dds_path_for(img: Path) -> Path:
 # with these rendering, and everything else is half-res now, so this is
 # strictly less resident texture memory than that known-good state.
 # Textures that upload fine at half-res but render BLANK on the Vita GXM
-# (device s3d/s3e) — the same half-res draw quirk as the card frames, NOT a
+# (device s3d/s3e) - the same half-res draw quirk as the card frames, NOT a
 # memory drop. Full-res is the proven fix (cards). Kept surgical: only the
 # small interactive UI + card/vfx atlases; big flat art (scene/portrait/
 # monster/rug backgrounds) renders correctly at half and holds the saving.
@@ -187,7 +187,7 @@ HALF_RES_FORCE_PATHS = (
 )
 # Quarter-data was tried for the five 2048x2048 City alpha overlays
 # to fit the exhausted mid-run pool: all five were admitted, but
-# hardware review rejected the result — half-data IS native
+# hardware review rejected the result - half-data IS native
 # screen resolution at Settings.scale=0.5, so quarter-data is a visible
 # downgrade versus Exordium. The layers are back at the normal half-data
 # scale; the admission headroom now comes from the 112MB-Java/240MB-newlib
@@ -196,7 +196,7 @@ HALF_RES_FORCE_PATHS = (
 # available for any future non-visual-critical texture.
 QUARTER_RES_FORCE_PATHS = ()
 # Chest/shop interactables live as loose files under images/npcs/ alongside
-# big backgrounds (rug, neow, heart) that DO render at half — so match by name.
+# big backgrounds (rug, neow, heart) that DO render at half - so match by name.
 HALF_RES_DENY_NAMES = ("Chest", "merchantObjects")
 
 
@@ -257,7 +257,7 @@ def next_pot(n: int) -> int:
 def pad_npot_atlas_pages(dst_root: Path, jobs: int) -> list[Path]:
     """Pad every non-power-of-two .atlas page to POT dimensions.
 
-    The Vita GPU (GXM) mangles NPOT texture sampling — the Ironclad's
+    The Vita GPU (GXM) mangles NPOT texture sampling - the Ironclad's
     611x113 page rendered him tiny/garbled until padded to 1024x128. Regions use absolute pixel coords
     and libGDX normalizes UVs by the real texture size, so extending the
     canvas bottom/right (transparent) is invisible except for fixing the

@@ -4,7 +4,7 @@ package org.apache.logging.log4j;
  * Shadow of the log4j-api Logger interface, declaring only the members the
  * game's bytecode invokes (the TeaVM linker reports any we miss). Shadowing
  * log4j entirely keeps log4j-core's reflection/JMX/ConcurrentSkipListMap
- * machinery out of the reachability graph — it alone caused ~170 of the 260
+ * machinery out of the reachability graph - it alone caused ~170 of the 260
  * errors in the first transpile.
  */
 public interface Logger {

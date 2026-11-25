@@ -1,0 +1,40 @@
+name: Bug
+description: Something crashes, looks wrong or does not build
+body:
+  - type: markdown
+    attributes:
+      value: Please don't attach game.bin, assets or a built SlayTheSpire.vpk. They are the game.
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where does it happen?
+      options: [Building on the PC, Launcher, In the game, Moving PC progress over]
+    validations:
+      required: true
+  - type: dropdown
+    id: model
+    attributes:
+      label: Vita model
+      options: [PCH-1000, PCH-2000, PS TV, Not on a Vita]
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: Build
+      description: Hold SELECT while the launcher starts, it is on the status screen. Or the release you built from.
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected and what you got.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: ux0:data/stsvita/stsvita.log, or stsvita.prev.log if you started the game again. For build problems, the container output.
+      render: text

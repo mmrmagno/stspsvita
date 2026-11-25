@@ -114,7 +114,7 @@ int main(int argc, char **argv) {
     if ((width & 3) != 0 || (height & 3) != 0) {
         return 3;
     }
-    /* Small/flat images stay PNG for UI crispness — except forced pages
+    /* Small/flat images stay PNG for UI crispness - except forced pages
      * (padded POT atlas pages, which must be compressed for VRAM). */
     if (!force && (width < 256 || height < 256)) {
         return 3;
@@ -141,8 +141,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* Reduced-data convention: the header keeps the ORIGINAL (logical) dims — the
-     * game's layout/UV math reads them via texture.getWidth() — while the
+    /* Reduced-data convention: the header keeps the ORIGINAL (logical) dims - the
+     * game's layout/UV math reads them via texture.getWidth() - while the
      * block data is encoded at a smaller size. stsv_tex_image_compressed infers
      * the actual upload dims from the data size. */
     int enc_w = width, enc_h = height;

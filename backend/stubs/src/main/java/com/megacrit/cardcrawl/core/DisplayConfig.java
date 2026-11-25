@@ -3,7 +3,7 @@ package com.megacrit.cardcrawl.core;
 /**
  * Shadow of the game's display-config reader (third game-package shadow;
  * see AsyncSaver for the policy). Justification: the original is desktop
- * display-mode negotiation via java.util.Scanner — which TeaVM cannot host —
+ * display-mode negotiation via java.util.Scanner - which TeaVM cannot host -
  * and on a Vita every value it negotiates is a hardware constant.
  * Public surface matches the original; getters return the Vita's reality.
  */
@@ -32,7 +32,7 @@ public class DisplayConfig {
     public boolean getIsFullscreen() {
         // Reported as windowed, not fullscreen: the options screen's
         // getFullScreenOnlyResolutions() enumerates display modes and filters
-        // out anything under 1024x576 — with the Vita's single 960x544 mode
+        // out anything under 1024x576 - with the Vita's single 960x544 mode
         // that yields an EMPTY resolution dropdown and a null-selectionBox NPE.
         // The windowed path always includes the current screen resolution, so
         // the dropdown has a valid entry. Rendering is our fixed framebuffer

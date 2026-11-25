@@ -5,6 +5,7 @@
 #
 # Prereqs: `make assets` and `make transpile` have been run.
 # Usage: tools/host_harness.sh [--run-only]
+# shellcheck disable=SC2046
 set -e
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

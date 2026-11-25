@@ -45,6 +45,13 @@ class CheckRelease(unittest.TestCase):
         elf.write_bytes(b"not affiliated with Mega Crit")
         self.assertEqual(cr.check_elf(elf), [])
 
+    def test_tag(self):
+        cmake = 'set(STSV_VERSION "01.02")'
+        self.assertEqual(cr.check_tag("v1.0.2", cmake), [])
+        for tag in ("v1.0.0", "1.0.2", "v1.02", "v1.0.20"):
+            self.assertEqual(len(cr.check_tag(tag, cmake)), 1)
+        self.assertEqual(len(cr.check_tag("v1.0.2", "")), 1)
+
     def test_tree(self):
         (self.root / "a.jar").write_bytes(b"")
         (self.root / "b.md").write_text("ftp://192.168." + "0.5")

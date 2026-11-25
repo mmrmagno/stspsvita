@@ -8,7 +8,7 @@ import com.badlogic.gdx.files.FileHandle;
  * java.io over TeaVM's C runtime reaches Vita paths directly:
  *
  *   internal/classpath -> app0:/assets/   (read-only VPK payload)
- *   local/external     -> ux0:data/stsvita/  (saves, preferences, logs —
+ *   local/external     -> ux0:data/stsvita/  (saves, preferences, logs -
  *                          same file formats as desktop, so PC saves can be
  *                          copied straight in)
  */
@@ -29,7 +29,7 @@ public class VitaFiles implements Files {
     public FileHandle getFileHandle(String path, FileType type) {
         // Handles are typed Absolute after resolution: FileHandle's
         // Classpath branches call Class.getResource, which doesn't exist
-        // under AOT — plain file IO on the resolved path always works.
+        // under AOT - plain file IO on the resolved path always works.
         return new VitaFileHandle(resolve(path, type), FileType.Absolute);
     }
 

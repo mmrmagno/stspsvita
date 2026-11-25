@@ -29,7 +29,7 @@ transferred, because the game does not need it to restore a save or an unlock.
   tools/import_progress.py --ftp-host 192.168.1.42 \
       --rollback-from progress-backups/20260809T101500Z --apply
 
-Close STSVITA on the Vita before applying: the game flushes its own progress
+Close the game on the Vita before applying: the game flushes its own progress
 on exit and would overwrite whatever was just imported.
 """
 from __future__ import annotations
@@ -897,7 +897,7 @@ def run(args, out=sys.stdout) -> int:
         if not args.apply:
             print(f"\ndry run, nothing written. Add --apply to import "
                   f"{len(writes)} file(s).", file=out)
-            print("Close STSVITA on the Vita first; it rewrites progress on exit.",
+            print("Close the game on the Vita first; it rewrites progress on exit.",
                   file=out)
             return EXIT_CONFLICT if plan.blocked_slots else EXIT_OK
 
@@ -951,7 +951,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         description="Copy Slay the Spire desktop progress (saves + preferences) "
                     "onto the Vita.",
-        epilog="Assets are never touched. Close STSVITA before applying.")
+        epilog="Assets are never touched. Close the game before applying.")
     src = ap.add_argument_group("source (desktop install)")
     src.add_argument("--source", help="Slay the Spire install directory")
     src.add_argument("--auto", action="store_true",

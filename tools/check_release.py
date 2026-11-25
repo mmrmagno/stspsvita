@@ -45,6 +45,14 @@ def check_elf(path: Path) -> list[str]:
     return [f"{path.name}: contains {m.decode()}" for m in GAME_MARKERS if m in data]
 
 
+def check_tag(tag: str, cmake: str) -> list[str]:
+    found = re.search(r'set\(STSV_VERSION "(\d+)\.(\d)(\d)"\)', cmake)
+    if not found:
+        return ["launcher version not found"]
+    wanted = "v{}.{}.{}".format(*map(int, found.groups()))
+    return [] if tag == wanted else [f"tag {tag} does not match launcher version {wanted}"]
+
+
 def check_tree(root: Path, names: list[str]) -> list[str]:
     problems = []
     for name in names:
@@ -66,6 +74,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--vpk", type=Path)
     ap.add_argument("--elf", type=Path, help="unpacked launcher ELF")
+    ap.add_argument("--tag", help="release tag, must match the launcher version")
     args = ap.parse_args()
     out = subprocess.run(["git", "ls-files", "-co", "--exclude-standard"], cwd=REPO,
                          capture_output=True, text=True, check=True).stdout
@@ -74,6 +83,8 @@ def main() -> int:
         problems += check_vpk(args.vpk)
     if args.elf:
         problems += check_elf(args.elf)
+    if args.tag:
+        problems += check_tag(args.tag, (ART / "CMakeLists.txt").read_text())
     for p in problems:
         print(f"release check: {p}", file=sys.stderr)
     if not problems:

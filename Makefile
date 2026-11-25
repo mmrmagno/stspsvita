@@ -1,4 +1,4 @@
-# STSVITA build orchestration.
+# STSPSVITA build orchestration.
 #
 #   ./build.sh --sts-dir ~/.steam/root/steamapps/common/SlayTheSpire
 #
@@ -15,17 +15,16 @@ LANGS         ?= eng
 AUDIO_KBPS    ?= 32
 WORK          := work
 PY            := python3
-BUNDLE_ASSETS ?= ON
 VITA_IP       ?=
 ALLOW_UNSUPPORTED ?= 0
 OUT           ?= out
 GRADLE_FLAGS  ?=
 VERIFY_FLAGS  := $(if $(filter 1 ON yes true,$(ALLOW_UNSUPPORTED)),--allow-unknown,)
 
-.PHONY: all release packages vpk vpk-slim incremental-slim verify extract \
-        assets livearea transpile native validate validate-slim \
+.PHONY: all release incremental verify extract \
+        assets livearea transpile native validate \
         deploy-assets stage launcher bubble test clean clean-build
-.NOTPARALLEL: release packages
+.NOTPARALLEL: release incremental
 
 all: release
 
@@ -48,56 +47,26 @@ transpile:
 	cd transpiler && gradle $(GRADLE_FLAGS) transpile
 
 native:
-	@test -n "$$VITASDK" || { echo "VITASDK env var not set — install https://vitasdk.org"; exit 2; }
+	@test -n "$$VITASDK" || { echo "VITASDK env var not set - install https://vitasdk.org"; exit 2; }
 	cmake -S native -B build/native \
 	  -DCMAKE_TOOLCHAIN_FILE=$$VITASDK/share/vita.toolchain.cmake \
-	  -DGENERATED_C=$(abspath $(WORK)/generated_c) \
-	  -DASSETS=$(abspath $(WORK)/assets_vita) \
-	  -DBUNDLE_ASSETS=$(BUNDLE_ASSETS) \
-	  $(if $(wildcard $(WORK)/sce_sys),-DSCE_SYS=$(abspath $(WORK)/sce_sys),)
+	  -DGENERATED_C=$(abspath $(WORK)/generated_c)
 	cmake --build build/native -j
-	@mkdir -p build
-	@cp build/native/STSVITA.vpk build/STSVITA$(if $(filter OFF,$(BUNDLE_ASSETS)),-slim).vpk
-	@echo "VPK: build/STSVITA$(if $(filter OFF,$(BUNDLE_ASSETS)),-slim).vpk"
 
-# Canonical release: one verified asset tree and generated-C tree feed both
-# package forms.  Toggling BUNDLE_ASSETS only reruns CMake's packaging step;
-# validate_build.py proves that the executable bytes remain identical.
-release: assets livearea transpile packages validate stage bubble
-
-packages:
-	@test -d "$(WORK)/assets_vita" || { echo "run 'make assets' first"; exit 2; }
-	@test -f "$(WORK)/generated_c/all.txt" || { echo "run 'make transpile' first"; exit 2; }
-	@test -f "$(WORK)/sce_sys/icon0.png" || { echo "run 'make livearea' first"; exit 2; }
-	$(MAKE) native BUNDLE_ASSETS=ON
-	$(MAKE) native BUNDLE_ASSETS=OFF
+release: assets livearea transpile native validate stage bubble
 
 validate:
 	$(PY) tools/validate_build.py --sts-input "$(STS_DIR)" --work "$(WORK)" \
 	  --build build --langs "$(LANGS)" --audio-kbps "$(AUDIO_KBPS)"
 
-validate-slim:
-	$(PY) tools/validate_build.py --sts-input "$(STS_DIR)" --work "$(WORK)" \
-	  --build build --langs "$(LANGS)" --audio-kbps "$(AUDIO_KBPS)" --slim-only
-
-# Full, self-contained VPK (code + assets). Install once; large (~335MB).
-vpk: assets livearea transpile native
-
-# Slim, code-only VPK (~7MB) — reinstalls in seconds while iterating on code.
-# The game reads assets from ux0:data/stsvita/assets (VitaFiles auto-detects
-# when app0:/assets is absent), so push them once: make deploy-assets VITA_IP=..
-vpk-slim: livearea transpile
-	$(MAKE) native BUNDLE_ASSETS=OFF
-	@echo "Slim VPK needs assets at ux0:data/stsvita/assets — make deploy-assets VITA_IP=.."
-
-# Fast native-only loop.  This deliberately reuses the existing asset and
-# generated-C trees; run `make transpile` first when backend/Java code changes.
-incremental-slim: verify
+# Fast native-only loop. Reuses the existing asset and generated-C trees; run
+# `make transpile` first when backend/Java code changes.
+incremental: verify
 	@test -d "$(WORK)/assets_vita" || { echo "incremental build needs $(WORK)/assets_vita; run a full ./build.sh first"; exit 2; }
 	@test -f "$(WORK)/generated_c/all.txt" || { echo "incremental build needs $(WORK)/generated_c; run a full ./build.sh first"; exit 2; }
 	@test -f "$(WORK)/sce_sys/icon0.png" || { echo "incremental build needs $(WORK)/sce_sys; run a full ./build.sh first"; exit 2; }
-	$(MAKE) native BUNDLE_ASSETS=OFF
-	$(MAKE) validate-slim STS_DIR="$(STS_DIR)" LANGS="$(LANGS)" AUDIO_KBPS="$(AUDIO_KBPS)"
+	$(MAKE) native
+	$(MAKE) validate STS_DIR="$(STS_DIR)" LANGS="$(LANGS)" AUDIO_KBPS="$(AUDIO_KBPS)"
 	$(MAKE) stage bubble OUT="$(OUT)"
 
 # One-time upload of the processed asset payload to the Vita over VitaShell FTP

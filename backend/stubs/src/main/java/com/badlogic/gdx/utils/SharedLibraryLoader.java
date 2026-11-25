@@ -5,7 +5,7 @@ import java.io.IOException;
 
 /**
  * Shadow of libGDX's native-library extractor/loader: there are no .so/.dll
- * natives in an AOT build — everything native is linked into the executable.
+ * natives in an AOT build - everything native is linked into the executable.
  * Platform flags describe the Vita. (Clean-room replacement for an
  * Apache-2.0 libGDX class; the real one reaches System.loadLibrary and
  * zip-extraction paths TeaVM can't and shouldn't compile.)

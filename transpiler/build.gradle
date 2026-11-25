@@ -17,7 +17,7 @@ def stsJar = providers.environmentVariable('STS_JAR')
         }).get()
 
 if (!stsJar) {
-    logger.warn('STS_JAR not set and work/jar_path.txt missing — run `make extract` first.')
+    logger.warn('STS_JAR not set and work/jar_path.txt missing - run `make extract` first.')
 }
 
 // Runs on the invoking JDK; TeaVM tooling requires 17+. The game's own

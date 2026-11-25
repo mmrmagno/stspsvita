@@ -41,7 +41,7 @@ public class VitaFileHandle extends FileHandle {
     // (SingleRelicViewPopup's relicFrame*.png, single-card portraits, monster
     // atlases re-read after every "Disposed Texture"). On desktop that's a
     // sub-ms page-cache hit; on the Vita each is a 100-250ms SD read on the
-    // render thread — the measured cause of relic-view/deck-browse frame
+    // render thread - the measured cause of relic-view/deck-browse frame
     // drops and room-load variance. Images on device never change, so serve
     // repeats from RAM: LRU by access order, byte budget sized well inside
     // the 112MB Java heap (~16-26MB live), per-file cap so one-time boot
@@ -156,7 +156,7 @@ public class VitaFileHandle extends FileHandle {
     /**
      * Don't load what the guard will drop: when no vitaGL
      * pool (nor the bounded spill) can admit a texture of this size, the
-     * upload path blanks it to 4x4 AFTER the multi-second SD read — pure
+     * upload path blanks it to 4x4 AFTER the multi-second SD read - pure
      * waste (17MB of char-select shoulders alone). Ask the guard first; if
      * doomed, return just the 128-byte DDS header. Its dimensions keep the
      * game's layout/UV math intact, and stsv_tex_image_compressed treats the
@@ -404,7 +404,7 @@ public class VitaFileHandle extends FileHandle {
             // Exact-size fast path: the estimate is the stat'd file length, so
             // read straight into the result array. The old BAOS route (chunk
             // buffer + growth doublings + toByteArray copy) allocated 2-3x the
-            // file size in garbage — its 256KB/4MB allocations were the main
+            // file size in garbage - its 256KB/4MB allocations were the main
             // young-GC triggers in the device log ([gc] req=).
             if (estimatedSize > 0) {
                 byte[] out = new byte[estimatedSize];

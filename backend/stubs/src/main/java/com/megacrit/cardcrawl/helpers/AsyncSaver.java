@@ -7,7 +7,7 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Shadow of the game's async save helper — the only game-package class we
+ * Shadow of the game's async save helper - the only game-package class we
  * replace. Justification: the original is a generic write-string-to-file
  * utility (no game logic) whose worker thread blocks on
  * java.util.concurrent.LinkedBlockingQueue, which TeaVM's classlib lacks.

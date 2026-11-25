@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Extract game assets from the user's jar into the work tree.
 
-The jar itself is left untouched — it is the TeaVM classpath input for the
+The jar itself is left untouched - it is the TeaVM classpath input for the
 transpile stage. This stage only pulls the asset payload out.
 
 Usage: extract.py --sts-dir <install dir> --work <work dir>

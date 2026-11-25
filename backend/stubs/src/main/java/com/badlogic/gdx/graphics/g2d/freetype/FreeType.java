@@ -323,7 +323,7 @@ public class FreeType {
 		}
 
 		public int getYscale () {
-			// NOTE: the jnigen original reads x_scale here too — preserved.
+			// NOTE: the jnigen original reads x_scale here too - preserved.
 			return ftSmYscale(address);
 		}
 

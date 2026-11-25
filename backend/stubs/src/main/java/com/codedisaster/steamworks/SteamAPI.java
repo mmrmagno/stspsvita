@@ -2,7 +2,7 @@ package com.codedisaster.steamworks;
 
 /**
  * steamworks4j stub: Steam is never available on the Vita. The game already
- * handles this — SteamIntegration checks init()/isSteamRunning() and falls
+ * handles this - SteamIntegration checks init()/isSteamRunning() and falls
  * back to its non-Steam distributor paths.
  */
 public final class SteamAPI {

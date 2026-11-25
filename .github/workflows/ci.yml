@@ -4,22 +4,39 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_call:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - run: make test
-      - run: shellcheck build.sh docker/entrypoint.sh
+      - run: python3 tools/check_release.py
+
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: shellcheck build.sh docker/entrypoint.sh tools/*.sh
+      - run: docker run --rm --network none -v "$PWD:/repo:ro" -w /repo rhysd/actionlint@sha256:96d4a8c87dbbfb3bdd324f8fdc285fc3df5261e2decc619a4dd7e8ee52bbfd46
 
   launcher:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     container: vitasdk/vitasdk:2026.08-20261123@sha256:579c6e00c5142fb59c980b6476f6120da54ee1ac832e973e60a43579153d4d4b
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -30,3 +47,19 @@ jobs:
         env:
           VITASDK: /usr/local/vitasdk
       - run: python3 tools/check_release.py --vpk build/STSPSVITA.vpk --elf build/launcher/launcher
+
+  builder:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: docker build -f docker/Dockerfile -t builder .
+      - run: docker run --rm --network none --entrypoint /src/tools/ci_compile.sh builder
+      - name: the image refuses to run without the game
+        run: |
+          mkdir out && chmod 777 out
+          status=0
+          docker run --rm --network none -v "$PWD/out:/out" builder || status=$?
+          test "$status" -eq 2

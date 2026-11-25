@@ -5,9 +5,9 @@ import com.badlogic.gdx.InputProcessor;
 
 /**
  * libGDX 1.9.5 Input for the Vita. Pointer-first: the front touch panel
- * (mouse in the host harness) drives the game's existing mouse path —
+ * (mouse in the host harness) drives the game's existing mouse path -
  * Slay the Spire is fully playable by pointer. SceCtrl buttons are exposed
- * for the controller layer (M3 follow-up: virtual Controller through the
+ * for the controller layer (a virtual Controller through the
  * Controllers stub so the game's gamepad UI mode works).
  *
  * Polled once per frame by VitaApplication.mainLoop before render().
@@ -43,7 +43,7 @@ public class VitaInput implements Input {
      * panel, Triangle=3 proceed, L=4 page left, R=5 page right,
      * SELECT=6 map, START=7 settings. Dpad is the POV hat; sticks are axes.
      * Dispatched as real gdx-controllers events so StS runs its native
-     * controller mode (cursor snapping, glyphs, remapping) — a plain
+     * controller mode (cursor snapping, glyphs, remapping) - a plain
      * keyboard shim made X "move up" instead of "play card".
      */
     private static final int[][] BUTTON_INDICES = {
@@ -458,7 +458,7 @@ public class VitaInput implements Input {
 
     /**
      * Fired when the game installs its text-typing InputProcessor
-     * (TypeHelper — the save-name / seed fields). VitaLauncher registers a
+     * (TypeHelper - the save-name / seed fields). VitaLauncher registers a
      * game-aware handler that opens the on-screen keyboard and writes the
      * result into the game's text field; the backend itself must not
      * reference game classes.

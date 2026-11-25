@@ -2,7 +2,7 @@
 """Soak-test accelerator: buff an on-device autosave into a god run.
 
 Slay the Spire saves are gson JSON, optionally obfuscated as
-base64(bytes XOR cycle("key")) (SaveFileObfuscator, decompiled).
+base64(bytes XOR cycle("key")) (SaveFileObfuscator).
 The loader accepts both forms; this tool preserves whichever it found.
 
 Usage:
@@ -11,13 +11,13 @@ Usage:
 
 `buff` sets 999/999 HP, 9999 gold, all three Act 4 keys, is_final_act_on,
 an insta-kill upgraded deck, +Fusion Hammer (4 energy), and three Fire
-Potions — so a player can speedrun Acts 1-4 with one-turn fights while
+Potions - so a player can speedrun Acts 1-4 with one-turn fights while
 still exercising every act's real content. Dev/soak tool only; never part
 of the build.
 
 `--no-act4` leaves the keys out so the run ends at the Act 3 boss. That
 victory path (DeathScreen isVictory) is the only one granting the plain
-RUBY/EMERALD/SAPPHIRE achievements, which the Watcher unlock requires —
+RUBY/EMERALD/SAPPHIRE achievements, which the Watcher unlock requires -
 a straight-to-Act-4 god run grants only *_PLUS and leaves her locked.
 """
 import argparse
@@ -78,7 +78,7 @@ def buff(save: dict, char: str, act4: bool = True) -> None:
     save["gold"] = 9999
     # Without keys/final-act the run ends at the Act 3 boss, which is the
     # ONLY place the plain RUBY/EMERALD/SAPPHIRE win achievements are
-    # granted — and the Watcher unlock requires one of them. A pure Act 4
+    # granted - and the Watcher unlock requires one of them. A pure Act 4
     # god run only grants *_PLUS and leaves the Watcher locked.
     save["has_ruby_key"] = act4
     save["has_emerald_key"] = act4
@@ -133,7 +133,7 @@ def main() -> int:
         chk = io.BytesIO()
         ftp.retrbinary(f"RETR {path}", chk.write)
         if chk.getvalue() != data:
-            print("READBACK MISMATCH — do not trust this save", file=sys.stderr)
+            print("READBACK MISMATCH - do not trust this save", file=sys.stderr)
             return 3
         deck = GOD_DECKS.get(args.char, GOD_DECK)
         act4_msg = ("no keys, act 3 finish (win achievement + Watcher unlock)"

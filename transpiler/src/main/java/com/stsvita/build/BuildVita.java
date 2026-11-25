@@ -15,7 +15,7 @@ import org.teavm.vm.TeaVMOptimizationLevel;
  * twitch, JNA) come first, then the Vita backend, then the user's jar, so the
  * desktop-only code inside the jar is never reachable and gets tree-shaken.
  *
- * Milestone M2. The TeaVM tooling API calls below are written against 0.15.0
+ * The TeaVM tooling API calls below are written against 0.15.0
  * and will be exercised/corrected when the transpile milestone starts.
  */
 public final class BuildVita {
@@ -51,7 +51,7 @@ public final class BuildVita {
         // OOM'd (FT error 64) with only ~88MB native under the 192MB split.
         // 144MB Java -> ~136MB native within the 280MB newlib heap.
         // min == max: TEAVM_PSP's virtualAlloc is a plain malloc of maxHeap at
-        // boot (newlib has no mmap), so a smaller min saves NOTHING natively —
+        // boot (newlib has no mmap), so a smaller min saves NOTHING natively -
         // it only lets the GC's shrink policy park the logical heap at 64MB.
         // A device log showed exactly that (avail 65536KB all
         // session, free ~0.5MB before each young pause, one pause every couple
@@ -81,7 +81,7 @@ public final class BuildVita {
         TeaVMProblemRenderer.describeProblems(
                 tool.getDependencyInfo().getCallGraph(), tool.getProblemProvider(), log());
         if (!tool.getProblemProvider().getSevereProblems().isEmpty()) {
-            System.err.println("transpile FAILED — unresolved classlib/linkage problems above");
+            System.err.println("transpile FAILED - unresolved classlib/linkage problems above");
             System.exit(1);
         }
         System.out.println("transpile OK -> " + outDir);

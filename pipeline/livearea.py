@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Generate the Vita LiveArea assets (bubble icon, background, start gate) from
-the user's own game files — same pipeline model as the rest of the assets:
+the user's own game files - same pipeline model as the rest of the assets:
 nothing game-derived is committed to the repo, everything is produced at build
-time into work/sce_sys/ and packed into the VPK.
+time into work/sce_sys/ and packed into SlayTheSpire.vpk.
 
 Sources (from the processed payload in work/assets_vita):
   title/title.jpg                     -> background scene
@@ -14,7 +14,7 @@ Outputs (work/sce_sys/):
   livearea/contents/startup.png          280x158  the "start game" gate image
   livearea/contents/template.xml         style "a1" layout
 
-Requires ImageMagick (`magick`). Run via `make livearea` / `make vpk`.
+Requires ImageMagick (`magick`). Run via `make livearea`.
 """
 import argparse
 import shutil
@@ -40,7 +40,7 @@ def magick(*args: str) -> None:
 
 def to_png8(path: Path) -> None:
     """Convert a PNG to 8-bit palettized in place. The Vita package installer
-    rejects 24/32-bit PNGs in sce_sys with error 0x8010113D — LiveArea images
+    rejects 24/32-bit PNGs in sce_sys with error 0x8010113D - LiveArea images
     must be 8-bit. pngquant preserves soft alpha in the palette; fall back to
     ImageMagick's PNG8 (binary transparency only) if it's unavailable."""
     tmp = path.with_suffix(".8bit.png")
@@ -66,7 +66,7 @@ def main() -> int:
     args = ap.parse_args()
 
     if not shutil.which("magick"):
-        print("ImageMagick (`magick`) not found — needed to build LiveArea assets", file=sys.stderr)
+        print("ImageMagick (`magick`) not found - needed to build LiveArea assets", file=sys.stderr)
         return 2
 
     # LiveArea art needs the original PNG/JPG inputs. The Vita asset pass may

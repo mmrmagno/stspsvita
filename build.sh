@@ -16,13 +16,13 @@ usage() {
 Usage: ./build.sh --sts-dir <install-dir> [options]
        ./build.sh --sts-jar <desktop-1.0.jar> [options]
 
-Build a clean, validated full VPK, slim VPK, external asset tree, and manifest.
+Build the game files and SlayTheSpire.vpk for the Vita from your own copy.
 
 Options:
   --langs <list>       Comma-separated game languages to retain (default: eng)
   --audio-kbps <rate>  Re-encode OGG audio (default: 32 at 24kHz; 48 for higher fidelity; 0 copies unchanged)
   --out <dir>          Where to put the files for the Vita (default: out)
-  --incremental        Reuse assets/generated C and rebuild only the slim VPK
+  --incremental        Reuse assets/generated C and rebuild only the native code
   --allow-unsupported-input
                        Contributor-only override for an unknown jar fingerprint
   -h, --help           Show this help
@@ -115,7 +115,7 @@ if ((ALLOW_UNSUPPORTED)); then
 fi
 
 if ((INCREMENTAL)); then
-    make incremental-slim "${MAKE_ARGS[@]}"
+    make incremental "${MAKE_ARGS[@]}"
 else
     # Session logs are intentionally preserved by clean-build.
     make clean-build

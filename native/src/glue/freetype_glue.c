@@ -7,7 +7,7 @@
  * and 64-bit host both work), booleans as int32_t (0/1).
  *
  * Compiles unchanged against the host's system freetype2 and vitasdk's
- * freetype — no platform-specific code.
+ * freetype - no platform-specific code.
  */
 
 #include <stdint.h>
@@ -251,7 +251,7 @@ int32_t stsv_ft_slot_bitmap_top(int64_t slot) {
 
 /* Per-frame rasterization time, polled by the [hitch] logger (glyph
  * generation is the prime suspect for the un-attributed combat frame
- * drops — damage numbers rasterize new glyph sizes mid-fight). */
+ * drops - damage numbers rasterize new glyph sizes mid-fight). */
 extern int64_t stsv_wall_us(void);
 static int64_t stsv_ft_us_accum;
 static int32_t stsv_ft_calls_accum;

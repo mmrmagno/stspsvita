@@ -41,7 +41,7 @@ public class ClasslibShims implements ClassHolderTransformer {
                 // (ClassReflectionInfoIntrinsic: fieldCount/annotation only);
                 // the classlib bodies of these two crash codegen if anything
                 // links them (libGDX ClassReflection does). No caller we keep
-                // at runtime uses them — make them honestly empty.
+                // at runtime uses them - make them honestly empty.
                 replaceBodyWithEmptyArray(cls, context, "getDeclaredMethods",
                         ValueType.object("java.lang.reflect.Method"));
                 replaceBodyWithEmptyArray(cls, context, "getDeclaredConstructors",

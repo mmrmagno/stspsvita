@@ -73,7 +73,7 @@ def patch_uchar(path: Path) -> bool:
         text = text.replace("#if TEAVM_PSP\n", f"{SENTINEL}\n{guard}\n", 1)
         changed = True
     # (2) The char16_t typedef needs uint16_t; Vita's <wchar.h> doesn't pull
-    # <stdint.h> in transitively (newlib), so add it explicitly — otherwise
+    # <stdint.h> in transitively (newlib), so add it explicitly - otherwise
     # char16_t is broken and every u"" string literal fails to initialize.
     if "#include <stdint.h>" not in text:
         text = text.replace("#include <wchar.h>",
@@ -116,7 +116,7 @@ static char* stsv_file_mbpath(char16_t* n, int32_t sz) {
 def patch_file(path: Path) -> bool:
     text = path.read_text()
     changed = False
-    # (1) file.c implements teavm_file_* only for TEAVM_UNIX / TEAVM_WINDOWS —
+    # (1) file.c implements teavm_file_* only for TEAVM_UNIX / TEAVM_WINDOWS -
     # no PSP branch, so TEAVM_UNIX=0 leaves the whole file-IO layer undefined.
     # Vita's newlib routes POSIX file IO (open/read/lseek/stat/opendir/getcwd/
     # getpwuid) to sceIo, so re-enable the UNIX branch on Vita.
@@ -226,13 +226,13 @@ def patch_array_data_offset(path: Path) -> bool:
     Root cause of the digits-become-zero bug (volume 0%, dungeon percents):
     the stock macro aligns the ABSOLUTE pointer (align(array+12, 8) on
     32-bit), so a long[]/double[] whose data was written at +16 reads at +12
-    after the compacting GC moves it to a 4-mod-8 address — every int64
+    after the compacting GC moves it to a 4-mod-8 address - every int64
     element is then read 4 bytes shifted (DoubleAnalyzer's mantissa tables
     became garbage after the first full GC). The allocator and the GC's
     objectSize already use the constant align(sizeof(TeaVM_Array), itemSize)
     offset, so the fixed offset is the consistent form. Reproduced and
     verified with the scratchpad 32-bit host probe (pre/post System.gc).
-    Upstream-worthy TeaVM fix (M5).
+    Upstream-worthy TeaVM fix.
     """
     text = path.read_text()
     sentinel = "/* STSVITA: fixed array data offset */"
@@ -268,7 +268,7 @@ def patch_dropdown_guard(path: Path) -> bool:
     """Null-guard DropdownMenu.setSelectedIndex against an empty dropdown.
 
     Opening the in-run settings screen on the Vita NPEs here: the resolution dropdown's selectionBox is null, which per the
-    ctor's bytecode means it was constructed with an EMPTY labels list —
+    ctor's bytecode means it was constructed with an EMPTY labels list -
     the display-options enumeration produced nothing for the Vita's single
     non-standard 960x544 mode on some path. Selecting a resolution is
     meaningless on fixed hardware, so an early return is the whole fix;
@@ -304,8 +304,8 @@ def patch_controller_model_ps4(path: Path) -> bool:
     "360" -> XBOX_360, contains "Xbox One" -> XBOX_ONE, anything else ->
     XBOX_360 (there is no PS-name branch in the desktop jar). The PS4 glyph
     assets ship with the game and the ControllerModel.PS4 enum survives
-    tree-shaking, so retarget the fallback branch — which is what our
-    "PS Vita" controller hits — to PS4.
+    tree-shaking, so retarget the fallback branch - which is what our
+    "PS Vita" controller hits - to PS4.
     """
     text = path.read_text()
     sentinel = "/* STSVITA: PS4 glyphs */"
@@ -336,11 +336,10 @@ def patch_gc_timing(path: Path) -> bool:
     (294/session, p50 16ms). A young GC triggers when getNextChunkIfPossible
     finds no single free chunk >= the requested allocation, so the line logs
     the trigger size, freeMemory before/after, availableBytes, and the time
-    since the previous GC ended — one device run discriminates heap
+    since the previous GC ended - one device run discriminates heap
     exhaustion (free ~0 before), fragmentation (free large but req large),
     and shrink-policy tightness (avail small). req is stale for explicit
     System.gc() calls (only alloc-triggered GCs set it).
-    Strip with the rest of the diagnostics for release (M5).
     """
     text = path.read_text()
     if "STSVITA: gc pause timing" in text:

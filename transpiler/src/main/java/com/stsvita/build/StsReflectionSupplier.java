@@ -31,7 +31,7 @@ public class StsReflectionSupplier implements ReflectionSupplier {
                 .getResourceAsStream("/stsvita-reflect.txt")) {
             if (in == null) {
                 System.err.println("StsReflectionSupplier: stsvita-reflect.txt missing "
-                        + "— run pipeline/typemanifest.py (gradle does this automatically)");
+                        + "- run pipeline/typemanifest.py (gradle does this automatically)");
                 return;
             }
             BufferedReader reader = new BufferedReader(

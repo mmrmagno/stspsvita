@@ -8,8 +8,26 @@ permissions:
   contents: read
 
 jobs:
-  launcher:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  check-tag:
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: the tag is on main and matches the launcher version
+        run: |
+          git merge-base --is-ancestor HEAD origin/main
+          python3 tools/check_release.py --tag "$GITHUB_REF_NAME"
+
+  launcher:
+    needs: [ci, check-tag]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     container: vitasdk/vitasdk:2026.08-20261123@sha256:579c6e00c5142fb59c980b6476f6120da54ee1ac832e973e60a43579153d4d4b
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -28,7 +46,9 @@ jobs:
           if-no-files-found: error
 
   builder:
+    needs: [ci, check-tag]
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -60,12 +80,18 @@ jobs:
   publish:
     needs: [launcher, builder]
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: vpk
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: STSPSVITA.vpk
       - run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --title "$GITHUB_REF_NAME" STSPSVITA.vpk STSPSVITA.vpk.sha256
         env:
           GH_TOKEN: ${{ github.token }}

@@ -5,7 +5,7 @@ import org.teavm.interop.c.Include;
 
 /**
  * The Java<->C boundary. Every function here is implemented in
- * native/src/glue/ and imported by TeaVM's C backend — no JNI involved.
+ * native/src/glue/ and imported by TeaVM's C backend - no JNI involved.
  * The @Include makes every calling TU declare the imports via
  * stsvita_glue.h (add native/src/glue to the include path).
  *
@@ -33,7 +33,7 @@ public final class VitaNatives {
     @Import(name = "stsv_is_host_harness")
     public static native int isHostHarness();
 
-    /** Wall-clock us — keeps counting through suspend, unlike micros(). */
+    /** Wall-clock us - keeps counting through suspend, unlike micros(). */
     @Import(name = "stsv_wall_us")
     public static native long wallMicros();
 

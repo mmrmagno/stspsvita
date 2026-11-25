@@ -1,6 +1,5 @@
 # Anything derived from the user's copy of the game must never be committed.
-game/*
-!game/.gitkeep
+game/
 work/
 # Root-anchored so it ignores the top-level build output dir but NOT source
 # packages named "build" (e.g. transpiler .../com/stsvita/build/).

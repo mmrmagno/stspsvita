@@ -65,10 +65,10 @@ def main() -> int:
 
     known = digest in KNOWN_JARS
     if known:
-        print(f"status: KNOWN GOOD — {KNOWN_JARS[digest]}")
+        print(f"status: KNOWN GOOD - {KNOWN_JARS[digest]}")
     else:
-        print("status: UNSUPPORTED — this exact jar fingerprint has not been "
-              "validated with STSVITA")
+        print("status: UNSUPPORTED - this exact jar fingerprint has not been "
+              "validated with STSPSVITA")
         if not args.allow_unknown:
             problems.append(
                 "unsupported jar fingerprint; use a supported V2.3.4 jar "

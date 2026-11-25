@@ -11,7 +11,7 @@ import com.stsvita.backend.VitaFiles;
  * Compiled against the user's own jar (compileOnly); becomes the TeaVM main
  * class. The desktop launcher's other duties don't exist here: no native-lib
  * extraction, no log4j bootstrap (LogManager is stubbed), no display-mode
- * negotiation — the Vita is one known machine at 960x544, which the game
+ * negotiation - the Vita is one known machine at 960x544, which the game
  * scales to by itself (Settings.scale = HEIGHT/1080, the same path desktop
  * uses for 1280x720 displays). DisplayConfig still reads/writes
  * info.displayconfig relative to cwd, which main.c chdir()s to DATA.
@@ -20,7 +20,7 @@ public final class VitaLauncher {
 
     public static void main(String[] args) {
         // Build-time-generated gson registrations (TypeTokens, factories,
-        // generic field elements) — must precede any game code.
+        // generic field elements) - must precede any game code.
         com.stsvita.gen.TypeManifest.install();
 
         // Auto-open the on-screen keyboard whenever the game focuses a text
@@ -59,7 +59,7 @@ public final class VitaLauncher {
         cfg.height = 544;
 
         // Mirrors DesktopLauncher: new LwjglApplication(new CardCrawlGame(
-        // config.preferencesDirectory), config) — with the Vita equivalents.
+        // config.preferencesDirectory), config) - with the Vita equivalents.
         final ApplicationListener game =
                 (ApplicationListener) new CardCrawlGame(VitaFiles.DATA + ".prefs/");
         new VitaApplication(game, cfg);

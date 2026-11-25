@@ -23,7 +23,7 @@ import java.util.Map;
  * fromJson(String, Type), toJson(Object), GsonBuilder.setPrettyPrinting().
  *
  * Field binding relies on TeaVM's supported reflection (getDeclaredFields /
- * newInstance) — target classes must be listed by the build-time
+ * newInstance) - target classes must be listed by the build-time
  * ReflectionSupplier (generated alongside the TypeToken manifest).
  * JSON numbers become Integer/Long/Float when bound into untyped Map/List
  * values, matching how the game consumes its prefs maps.
@@ -267,7 +267,7 @@ public class Gson {
     private static Field findField(Class<?> cls, String name) {
         // Deliberately exception-free: the getDeclaredField/NoSuchFieldException
         // form ran a setjmp/longjmp round-trip (plus an exception allocation)
-        // per missing field per superclass level — the hottest exception path
+        // per missing field per superclass level - the hottest exception path
         // in the port, and the site of a rare on-device crash (a null Class
         // reached getSuperclass after the longjmp).
         for (Class<?> c = cls; c != null && c != Object.class; c = c.getSuperclass()) {
