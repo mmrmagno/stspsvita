@@ -18,9 +18,7 @@ static int g_ready;
 #define STSV_SOURCE_POOL 30
 static ALuint g_sources[STSV_SOURCE_POOL];
 
-/* Software loudness boost (19/10 = 1.9x), applied to decoded PCM with
- * saturation. The Vita speaker is quiet at StS's mix levels, but any AL
- * gain > 1.0 makes this port's fixed-point mixer WRAP samples. */
+/* The Vita speaker is quiet at the game's mix, so boost the decoded PCM. */
 #define STSV_PCM_BOOST_NUM 19
 #define STSV_PCM_BOOST_DEN 10
 
@@ -48,11 +46,7 @@ void stsv_audio_init(void) {
         return;
     }
     alGenSources(STSV_SOURCE_POOL, g_sources);
-    /* No AL-side gain boost: this AL port's mixer WRAPS instead of clamping
-     * whenever gain x sample overflows s16 (listener gain 2.0 = channels at
-     * 100% went fully silent; 1.9 broke content-dependently). Loudness is
-     * boosted in our decode path instead (stsv_boost_pcm, saturating), so
-     * every gain OpenAL ever sees stays in [0, 1]. */
+    /* Keep every AL gain within [0, 1]: this mixer wraps instead of clamping. */
     alListenerf(AL_GAIN, 1.0f);
     g_ready = 1;
     fprintf(stderr, "[audio] OpenAL ready (%d sources, pcm boost %d/%d)\n",
@@ -158,12 +152,7 @@ int stsv_sound_load(const void *data, int len) {
     ALenum format = (vi->channels == 1) ? AL_FORMAT_MONO16 : AL_FORMAT_STEREO16;
     ALsizei rate = (ALsizei) vi->rate;
 
-    /* Exact-size allocation: the doubling-realloc chain peaked
-     * at ~2x the decoded size in one contiguous block, and an 8s stereo SFX
-     * (STS_UnlockScreen_v1) hit a fragmented-heap moment and failed silently
-     * ([audio] newSound FAILED with no ov_open error). Memory callbacks are
-     * seekable, so ov_pcm_total is available; fall back to the grow loop if
-     * it is not. */
+    /* Exact size: growing by doubling fails on a fragmented heap. */
     size_t cap = 1u << 16, size = 0;
     ogg_int64_t total_pcm = ov_pcm_total(&vf, -1);
     if (total_pcm > 0) {

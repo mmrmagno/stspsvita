@@ -20,8 +20,6 @@ import org.teavm.model.emit.ValueEmitter;
  *    FileHandle.exists()'s Classpath branch, which our backend never takes
  *    at runtime (handles are pre-resolved to Absolute).
  *  - Locale.getDefault(Locale.Category) -> Locale.getDefault().
- *
- * Candidates for upstreaming as real implementations.
  */
 public class ClasslibShims implements ClassHolderTransformer {
 
@@ -41,7 +39,7 @@ public class ClasslibShims implements ClassHolderTransformer {
                 // (ClassReflectionInfoIntrinsic: fieldCount/annotation only);
                 // the classlib bodies of these two crash codegen if anything
                 // links them (libGDX ClassReflection does). No caller we keep
-                // at runtime uses them - make them honestly empty.
+                // at runtime uses them, so return empty arrays.
                 replaceBodyWithEmptyArray(cls, context, "getDeclaredMethods",
                         ValueType.object("java.lang.reflect.Method"));
                 replaceBodyWithEmptyArray(cls, context, "getDeclaredConstructors",

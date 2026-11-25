@@ -223,16 +223,9 @@ def patch_float_tostring(path: Path) -> bool:
 def patch_array_data_offset(path: Path) -> bool:
     """Make TEAVM_ARRAY_DATA use a fixed, address-independent data offset.
 
-    Root cause of the digits-become-zero bug (volume 0%, dungeon percents):
-    the stock macro aligns the ABSOLUTE pointer (align(array+12, 8) on
-    32-bit), so a long[]/double[] whose data was written at +16 reads at +12
-    after the compacting GC moves it to a 4-mod-8 address - every int64
-    element is then read 4 bytes shifted (DoubleAnalyzer's mantissa tables
-    became garbage after the first full GC). The allocator and the GC's
-    objectSize already use the constant align(sizeof(TeaVM_Array), itemSize)
-    offset, so the fixed offset is the consistent form. Reproduced and
-    verified with the scratchpad 32-bit host probe (pre/post System.gc).
-    Upstream-worthy TeaVM fix.
+    The stock macro aligns the absolute pointer, so when the compacting GC moves
+    a long[] or double[] to a 4-mod-8 address its data reads 4 bytes shifted.
+    The allocator and the GC already use the fixed offset.
     """
     text = path.read_text()
     sentinel = "/* STSVITA: fixed array data offset */"
@@ -330,17 +323,7 @@ def patch_controller_model_ps4(path: Path) -> bool:
 
 
 def patch_gc_timing(path: Path) -> bool:
-    """Time every GC pass and log pauses >= 100ms WITH memory context (v2).
-
-    The combat stutter is young pauses firing every couple of frames
-    (294/session, p50 16ms). A young GC triggers when getNextChunkIfPossible
-    finds no single free chunk >= the requested allocation, so the line logs
-    the trigger size, freeMemory before/after, availableBytes, and the time
-    since the previous GC ended - one device run discriminates heap
-    exhaustion (free ~0 before), fragmentation (free large but req large),
-    and shrink-policy tightness (avail small). req is stale for explicit
-    System.gc() calls (only alloc-triggered GCs set it).
-    """
+    """Log GC pauses of 100ms or more with the memory state."""
     text = path.read_text()
     if "STSVITA: gc pause timing" in text:
         return False

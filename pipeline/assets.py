@@ -114,19 +114,8 @@ def build_dds_encoder(work: Path) -> Path:
     return exe
 
 
-# Half-res .dds: StS art is authored for 1920x1080 and the
-# Vita renders 960x544 with Settings.scale = 0.5, so every draw lands at half
-# the authored pixel size - half-res data IS native resolution on screen. The
-# .dds header keeps the ORIGINAL (logical) dims, the game's layout/UV/srcRect
-# math reads them via texture.getWidth() - while the encoded blocks are half
-# size; stsv_tex_image_compressed infers the actual upload dims from the data
-# size;
-# now applied to EVERYTHING /8-dimensioned (ddsenc -2 falls back to full-res
-# otherwise). This is what lets the boot preload (cards/cardui/ui/title,
-# ~130MB at full res) fit the vitaGL pools instead of dropping the late
-# preloads (combat buttons, campfire UI, settings/map/reward panels,
-# powers.png buff icons), and it cuts the on-demand loads (1024Portraits
-# card popups, largeRelics, event art) 4x.
+# The art is made for 1920x1080 and the Vita draws at scale 0.5, so half-size
+# data is native resolution. The .dds header keeps the original size.
 
 
 def dds_path_for(img: Path) -> Path:
@@ -146,37 +135,15 @@ def dds_path_for(img: Path) -> Path:
     return img.with_suffix(".dds")
 
 
-# Atlases whose REGION draws render blank at half-res on the Vita GXM
-# card frames/banners (cardui), the small
-# card-art atlas (cards), and all combat/particle VFX (vfx). The atlas TEXTURE
-# uploads and samples fine at half-res (the cardui CARD_BACK pile icon and the
-# 2048 half-res title.atlas both render) - but the specific SpriteBatch draws
-# these use (rotated/scaled TextureRegion draws for frames, additive blends
-# for VFX) come out blank, while standalone-Texture draws, Spine monster
-# atlases, and scene/UI atlases all render correctly at half-res. Root cause
-# not pinned (not reproducible on the desktop-GL host; GXM-specific), so keep
-# these three full-res. Memory is fine: earlier rounds ran ALL atlases full-res
-# with these rendering, and everything else is half-res now, so this is
-# strictly less resident texture memory than that known-good state.
-# Textures that upload fine at half-res but render BLANK on the Vita GXM
-# (device s3d/s3e) - the same half-res draw quirk as the card frames, NOT a
-# memory drop. Full-res is the proven fix (cards). Kept surgical: only the
-# small interactive UI + card/vfx atlases; big flat art (scene/portrait/
-# monster/rug backgrounds) renders correctly at half and holds the saving.
+# These draw blank on the Vita at half size, so they stay full size.
 HALF_RES_DENY = (
     "cardui/", "cards/", "vfx/",
     "images/ui/topPanel/", "images/ui/campfire/",
     "images/ui/reward/", "images/ui/option/",
 )
-# The map parchment pages are large standalone textures and rendered correctly
-# in the global-half device run. Keeping the whole directory full-res made the
-# four pages consume about 7MB when DungeonMapScreen opened, exhausting the
-# bounded spill and blanking the map. The compact legend draw was reported
-# missing at half-res, so retain full data for that one texture.
+# The legend draws blank at half size, the other map pages do not.
 HALF_RES_DENY_PATHS = ("images/ui/map/legend2.png",)
-# Button faces need full-size data on GXM, but their translucent shadow and
-# outline layers can use native-screen-resolution data. This compensates for
-# the critical UI boot spill without making the controls disappear again.
+# Button faces need full size, their shadow and outline layers do not.
 HALF_RES_FORCE_PATHS = (
     "images/ui/topPanel/cancelButtonShadow.png",
     "images/ui/topPanel/cancelButtonOutline.png",
@@ -185,15 +152,6 @@ HALF_RES_FORCE_PATHS = (
     "images/ui/topPanel/proceedButtonShadow.png",
     "images/ui/topPanel/proceedButtonOutline.png",
 )
-# Quarter-data was tried for the five 2048x2048 City alpha overlays
-# to fit the exhausted mid-run pool: all five were admitted, but
-# hardware review rejected the result - half-data IS native
-# screen resolution at Settings.scale=0.5, so quarter-data is a visible
-# downgrade versus Exordium. The layers are back at the normal half-data
-# scale; the admission headroom now comes from the 112MB-Java/240MB-newlib
-# rebalance (larger vitaGL RAM pool) instead of a per-scene quality cut.
-# The -4 encoder path and the loader's quarter-payload recognition remain
-# available for any future non-visual-critical texture.
 QUARTER_RES_FORCE_PATHS = ()
 # Chest/shop interactables live as loose files under images/npcs/ alongside
 # big backgrounds (rug, neow, heart) that DO render at half - so match by name.

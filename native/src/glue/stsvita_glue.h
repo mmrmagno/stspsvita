@@ -55,11 +55,8 @@ int32_t stsv_touch_x(int32_t finger);
 int32_t stsv_touch_y(int32_t finger);
 
 /* --- OpenAL audio (audio_glue.c) ------------------------------------------
- * Music handles are pointers packed into int64_t. These declarations are
- * load-bearing: without them the TeaVM TUs called the functions implicitly
- * declared (int return), which truncated the 64-bit host's heap pointers to
- * 32 bits and crashed the harness at the first setLooping. The 32-bit Vita
- * only worked by accident. VitaAudio.java @Includes this header. */
+ * Music handles are pointers packed into int64_t. Without these prototypes a
+ * 64-bit host truncates them to 32 bits. */
 int32_t stsv_sound_load(const void *data, int32_t len);
 void    stsv_sound_free(int32_t buffer);
 int32_t stsv_sound_play(int32_t buffer, float volume, float pitch, float pan, int32_t loop);

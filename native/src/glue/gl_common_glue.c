@@ -12,11 +12,7 @@
 #include <psp2/kernel/sysmem.h>
 #endif
 
-/* Last image file read (VitaFileHandle.readBytes notes it) - names the
- * texture in the [tex] SKIP/SPILL lines. Loads are synchronous on the
- * single game thread (read -> decode -> upload), so the last-read image is
- * the upload's source for every real asset. Dynamic pages (glyph atlases)
- * have no file and may show a stale name; they never hit the guard. */
+/* Last image file read, only used to name a texture in the log. */
 static char stsv_tex_path[192] = "?";
 
 void stsv_tex_note_path(const void *utf8, int32_t len) {
@@ -26,8 +22,7 @@ void stsv_tex_note_path(const void *utf8, int32_t len) {
     stsv_tex_path[n] = '\0';
 }
 
-/* Per-frame runtime stb_dxt compression + glTexImage upload time, polled by
- * the [hitch] logger like the ft/subtex accumulators (combat frame drops). */
+/* Per-frame counters, read by the [hitch] logger. */
 static int64_t stsv_dxt_us_accum;
 static int32_t stsv_dxt_calls_accum;
 static int64_t stsv_upload_us_accum;
@@ -68,10 +63,8 @@ static void stsv_upload_time(int64_t t0) {
 #endif
 
 #if defined(__vita__) || defined(VITA)
-/* Texture IDs we stored compressed. glTexSubImage2D with RGBA into a compressed
- * texture is invalid and faults vitaGL, so we track them and skip such
- * sub-uploads (see stsv_tex_sub_image_rgba). Mostly-transparent pages (font
- * glyph atlases, which ARE sub-uploaded) are left uncompressed instead. */
+/* glTexSubImage2D with RGBA into a compressed texture faults vitaGL, so
+ * remember which ids are compressed. */
 #define STSV_MAX_COMPRESSED 1024
 static int stsv_compressed_ids[STSV_MAX_COMPRESSED];
 static int stsv_compressed_n;
@@ -89,16 +82,8 @@ static void stsv_mark_compressed(void) {
     }
 }
 
-/* Once a glyph page, always a glyph page (the act-title "i"
- * bug's true mechanism): incremental FreeType packer pages are born nearly
- * empty (>=96% transparent -> kept uncompressed so glTexSubImage2D works).
- * But when a page later takes a FULL re-upload (PixmapPacker's dirty flush
- * at the end of a GlyphLayout), it is by then well below 96% transparent -
- * dungeonTitleFont's page was ~78% after "Exordium" - so the old heuristic
- * DXT-compressed it and marked it, and every glyph rasterized after that
- * flush was silently dropped by the sub-upload guard. "Exordium" (in the
- * compressed upload) rendered; "The City" kept only its shared glyph "i".
- * Track ids that ever uploaded as a glyph page and never compress them. */
+/* FreeType glyph pages start almost empty and fill up later through
+ * glTexSubImage2D, so an id that was ever a glyph page is never compressed. */
 #define STSV_MAX_GLYPH_PAGES 256
 static int stsv_glyph_page_ids[STSV_MAX_GLYPH_PAGES];
 static int stsv_glyph_page_n;
@@ -117,8 +102,6 @@ static void stsv_mark_glyph_page(int id) {
     }
 }
 
-/* Recycled ids again: a deleted glyph page's id must not pin the next
- * texture to the uncompressed path. */
 static void stsv_unmark_glyph_page(int id) {
     for (int i = 0; i < stsv_glyph_page_n; ) {
         if (stsv_glyph_page_ids[i] == id) {
@@ -136,14 +119,7 @@ static int stsv_is_compressed(int id) {
     return 0;
 }
 
-/* GL recycles texture ids. Without this, a deleted compressed texture's id
- * stays marked, and when vitaGL hands the same id to a NEW uncompressed
- * texture, stsv_tex_sub_image_rgba silently drops every sub-upload into it.
- * Device-diagnosed: the act-transition title rendered only "i":
- * dungeonTitleFont's glyph page (created mid-run, after an act of monster
- * atlas create/delete churn) landed on a stale-marked id, so every glyph
- * rasterized after the page's initial full upload was invisible. Called on
- * delete and on any full (re)definition; compressed uploads re-mark. */
+/* GL reuses ids: a stale mark would drop every sub-upload to the new texture. */
 static void stsv_unmark_compressed(int id) {
     for (int i = 0; i < stsv_compressed_n; ) {
         if (stsv_compressed_ids[i] == id) {
@@ -154,32 +130,15 @@ static void stsv_unmark_compressed(int id) {
     }
 }
 
-/* When every vitaGL pool is full, textures used to be dropped to a 4x4 blank
- * (black backgrounds, invisible elites/bosses). vitaGL can also allocate
- * from newlib malloc (VGL_MEM_EXTERNAL), so allow a BOUNDED spill there -
- * but ONLY after boot: the newlib headroom is also where vitaGL gets its
- * per-frame vertex buffers, and letting the boot preload eat 24MB of it
- * crashed the first menu draw (memcpy into a failed buffer alloc inside
- * _glDrawElements, C2-12828 dump). Post-create the native
- * working set is stable, and the mid-run loads (boss atlases, scene
- * backgrounds) are exactly the drops the player actually sees. Each
- * admission is gated by a malloc probe that keeps a generous reserve for
- * FreeType + vitaGL runtime allocations. */
-/* Emergency valve only: a 16MB spill starved vitaGL's draw-time
- * vertex buffers (memcpy crash in _glDrawElements loading an elite fight).
- * The current Act-2 candidate gets its texture headroom from the dedicated
- * RAM pool (main.c newlib 280->272MB); the spill stays tiny and heavily
- * reserved. The 272MB/6MB pair still requires physical-Vita acceptance. */
+/* When the vitaGL pools are full, a few textures may go to newlib malloc. Kept
+ * small, and off during boot, because vitaGL takes its vertex buffers from the
+ * same heap and crashes in _glDrawElements when that allocation fails. */
 #define STSV_SPILL_BUDGET   (6u << 20)
 #define STSV_SPILL_RESERVE  (48u << 20)
 static size_t stsv_spill_used;
 static int stsv_spill_enabled;
 
-/* Live accounting: without a refund on glDeleteTextures the budget is a
- * lifetime high-water mark, and the character-select panels (loaded right
- * after boot, disposed on run start) consumed all 16MB before the first
- * fight. Track which texture ids were admitted and
- * give the bytes back when they are deleted or re-uploaded. */
+/* Gives the bytes back when a texture is deleted or uploaded again. */
 #define STSV_SPILL_TRACK 128
 static struct { int id; size_t bytes; } stsv_spilled[STSV_SPILL_TRACK];
 
@@ -207,7 +166,6 @@ static void stsv_spill_note(int id, size_t bytes) {
     }
 }
 
-/* Called from Java once the game's create() has finished (VitaApplication). */
 void stsv_tex_spill_enable(void) {
     stsv_spill_enabled = 1;
     fprintf(stderr, "[tex] spill enabled (budget %dKB, reserve %dKB)\n",
@@ -221,12 +179,8 @@ static size_t stsv_pool_maxfree(void) {
     return maxfree;
 }
 
-/* These UI textures are loaded at the end of ImageMaster's preload or while
- * create() constructs DungeonMapScreen. The dedicated pools can already be
- * below their safety margin by then, which used to replace them with 4x4
- * blanks. Admit only this known-critical set into the existing bounded spill
- * before create() returns; unrelated boot art remains barred so draw buffers
- * retain their native headroom. */
+/* Loaded late in the boot preload, when the pools are already full, and the
+ * game keeps them all run. These may spill before create() returns. */
 static int stsv_boot_critical_texture(void) {
     return strstr(stsv_tex_path, "/images/ui/campfire/") != NULL
         || strstr(stsv_tex_path, "/images/ui/topPanel/") != NULL
@@ -237,23 +191,13 @@ static int stsv_boot_critical_texture(void) {
         || (strstr(stsv_tex_path, "/images/npcs/") != NULL
             && strstr(stsv_tex_path, "Chest") != NULL)
         || strstr(stsv_tex_path, "/powers/powers") != NULL
-        /* Last boot-time blanks: the four characters'
-         * corpse + idle sheets and the megaCrit splash load at the very end
-         * of the preload while pool maxfree is transiently ~14KB and the
-         * spill is still gated. AbstractPlayer holds these textures for the
-         * whole run (blank corpse on death screens). ~480KB total; the boot
-         * spill is otherwise unused (0KB) since the 77MB-pool rebalance. */
         || (strstr(stsv_tex_path, "/images/characters/") != NULL
             && (strstr(stsv_tex_path, "corpse") != NULL
                 || strstr(stsv_tex_path, "/idle/") != NULL))
         || strstr(stsv_tex_path, "/images/megaCrit") != NULL;
 }
 
-/* Read-only preview of stsv_tex_can_alloc: would a texture of this size be
- * admitted right now? Nothing is reserved. VitaFileHandle asks BEFORE reading
- * a big .dds payload off the SD card, the load-then-drop waste (17MB of
- * char-select shoulders at 0.7s each, ~14s of the save-slot stall) paid the
- * full read+decode cost for textures the guard then blanked anyway. */
+/* Lets VitaFileHandle skip reading a texture that would be dropped anyway. */
 int32_t stsv_tex_would_fit(int32_t need) {
     size_t n = (size_t) need;
     if (stsv_pool_maxfree() > n + (1u << 20)) {
@@ -330,18 +274,11 @@ int32_t stsv_tex_would_fit(int32_t need) {
 }
 #endif
 
-/* Upload an RGBA8888 image. On the Vita, atlas pages (2048² RGBA = 16MB) blow
- * the texture budget, so compress them to DXT5 (4x smaller) on the fly and
- * upload the blocks; small/odd-sized textures and the host build upload plain
- * RGBA unchanged. */
+/* Compresses large images to DXT on upload, or the atlases do not fit. */
 void stsv_tex_image_rgba(int target, int level, int width, int height, const void *rgba) {
 #if defined(__vita__) || defined(VITA)
-    /* Full redefinition: the bound id is no longer compressed (recycled ids
-     * kept stale marks and killed later glyph sub-uploads; see unmark). */
     int bound_id = stsv_bound_tex();
     stsv_unmark_compressed(bound_id);
-    /* Known glyph pages must stay uncompressed forever, no matter how full
-     * their re-upload is - see stsv_mark_glyph_page. */
     if (level == 0 && stsv_is_glyph_page(bound_id)) {
         int64_t up_t0 = stsv_wall_us();
         glTexImage2D((GLenum) target, level, GL_RGBA, width, height, 0,
@@ -352,11 +289,6 @@ void stsv_tex_image_rgba(int target, int level, int width, int height, const voi
     if (width >= 256 && height >= 256 && (width & 3) == 0 && (height & 3) == 0) {
         const unsigned char *src = (const unsigned char *) rgba;
         int64_t dxt_t0 = stsv_wall_us();
-        /* One pass: detect transparency (DXT5 vs DXT1) and whether the image is
-         * fully blank. A blank upload is a dynamic texture - e.g. an incremental
-         * FreeType glyph atlas that gets filled later via glTexSubImage2D, which
-         * is INVALID on a compressed texture (vitaGL memcpy's out of bounds and
-         * faults). Leave those uncompressed so sub-uploads work. */
         int has_alpha = 0;
         size_t npx = (size_t) width * height, transparent = 0;
         for (size_t i = 0; i < npx; i++) {
@@ -364,11 +296,7 @@ void stsv_tex_image_rgba(int target, int level, int width, int height, const voi
             if (a != 0xff) has_alpha = 1;
             if (a == 0) transparent++;
         }
-        /* Near-empty pages are dynamic glyph atlases (a few glyphs on a big
-         * transparent page) that get filled via glTexSubImage2D - invalid on a
-         * compressed texture. Leave those uncompressed. The threshold is high
-         * (96%) so that only genuine glyph pages qualify; sparse-but-real card/
-         * image atlases stay compressed, keeping native heap free for fonts. */
+        /* At least 96% transparent means a glyph page: leave it uncompressed. */
         if (transparent * 100 >= npx * 96) {
             stsv_dxt_us_accum += stsv_wall_us() - dxt_t0;
             stsv_dxt_calls_accum++;
@@ -403,11 +331,7 @@ void stsv_tex_image_rgba(int target, int level, int width, int height, const voi
             }
             stsv_dxt_us_accum += stsv_wall_us() - dxt_t0;
             stsv_dxt_calls_accum++;
-            /* Guard: vitaGL's gpu_alloc_compressed_texture FAULTS (data abort)
-             * when no allocation path can hold the texture. Upload when a pool
-             * has room OR the bounded newlib spill accepts it; otherwise drop
-             * to a 4x4 blank so the run survives (that atlas page renders
-             * empty) instead of hard-crashing. */
+            /* vitaGL faults when nothing can hold the texture, so draw a blank. */
             if (stsv_tex_can_alloc(outSize, width, height, "")) {
                 int64_t up_t0 = stsv_wall_us();
                 glCompressedTexImage2D((GLenum) target, level, fmt,
@@ -434,20 +358,12 @@ void stsv_tex_image_compressed(int target, int level, int internal_format,
                                int width, int height, int border,
                                int image_size, const void *blocks) {
 #if defined(__vita__) || defined(VITA)
-    /* Redefinition clears any stale compressed mark on a recycled id; the
-     * successful upload below re-marks. The 4x4-blank drop paths then leave
-     * the texture correctly unmarked (they are plain RGBA). A recycled
-     * glyph-page id redefined from a .dds is no longer a glyph page. */
     stsv_unmark_compressed(stsv_bound_tex());
     stsv_unmark_glyph_page(stsv_bound_tex());
 #endif
-    /* width/height are the LOGICAL dimensions (what the game's layout/UV math
-     * sees via texture.getWidth()). Reduced-data .dds files keep the original
-     * dims in their header but carry blocks for half- or quarter-size uploads;
-     * infer the actual upload dims from image_size. A size that matches none
-     * of those encodings is the skip-read stub (bare 128B header,
-     * VitaFileHandle) or a truncated file - upload a 4x4 blank rather than let
-     * vitaGL read out of bounds. */
+    /* width/height are the original size the game lays out with. The data may
+     * be half or quarter size, so get the real size from image_size. Anything
+     * else is a truncated file or the header-only stub from VitaFileHandle. */
     int block_bytes = internal_format == GL_COMPRESSED_RGB_S3TC_DXT1_EXT ? 8 : 16;
     int up_w = width, up_h = height;
     size_t full_size = (size_t) (width / 4) * (size_t) (height / 4) * block_bytes;
@@ -468,11 +384,6 @@ void stsv_tex_image_compressed(int target, int level, int internal_format,
         return;
     }
 #if defined(__vita__) || defined(VITA)
-    /* Same guard as stsv_tex_image_rgba: vitaGL's texture allocator FAULTS
-     * (data abort inside vglGetTexDataPointer / gpu_alloc_compressed_texture)
-     * when no allocation path can hold the texture. Pool room OR bounded
-     * newlib spill; otherwise drop to a 4x4 blank so the run survives (that
-     * page renders empty) instead of hard-crashing (C2-12828-1). */
     if (!stsv_tex_can_alloc((size_t) image_size, up_w, up_h, "-compressed")) {
         unsigned char blank[64] = {0};
         glTexImage2D((GLenum) target, level, GL_RGBA, 4, 4, 0,
@@ -485,26 +396,16 @@ void stsv_tex_image_compressed(int target, int level, int internal_format,
                            up_w, up_h, border, image_size, blocks);
     stsv_upload_time(up_t0);
 #if defined(__vita__) || defined(VITA)
-    /* vitaGL reports a benign GL_INVALID_ENUM after compressed uploads.
-     * Drain it so it cannot leak into game code, without synchronously
-     * logging every texture load to the memory card. */
+    /* vitaGL leaves a GL_INVALID_ENUM behind after compressed uploads. */
     (void) glGetError();
     stsv_mark_compressed();
 #endif
 }
 
-/* RGBA sub-upload. If the bound texture was stored compressed, skip it - a
- * compressed texture can't take an RGBA sub-image and vitaGL would fault.
- * The mark list is kept accurate across delete/redefine (stsv_unmark_
- * compressed), so this only fires for textures that are genuinely
- * compressed right now - never for a fresh glyph page on a recycled id. */
-/* Per-frame sub-upload time (glyph atlas writes), polled by the [hitch]
- * logger together with the FreeType accumulator. */
 extern int64_t stsv_wall_us(void);
 static int64_t stsv_subtex_us_accum;
 static int32_t stsv_subtex_calls_accum;
 
-/* Returns ms*1000 + calls (calls capped at 999) and resets. */
 int64_t stsv_subtex_frame_stats(void) {
     int64_t ms = stsv_subtex_us_accum / 1000;
     int32_t calls = stsv_subtex_calls_accum > 999 ? 999 : stsv_subtex_calls_accum;
