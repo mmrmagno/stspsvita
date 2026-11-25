@@ -9,6 +9,9 @@ RUN git init -q /tmp/vitaGL && cd /tmp/vitaGL \
  && git fetch -q --depth 1 https://github.com/Rinnegatamante/vitaGL.git df342e89f33adaf5619c313628ada0d359524f30 \
  && git checkout -q FETCH_HEAD && make -j"$(nproc)" NO_DEBUG=1 \
  && cp libvitaGL.a "$VITASDK/arm-vita-eabi/lib/" && cp source/vitaGL.h "$VITASDK/arm-vita-eabi/include/"
+RUN install -d "$VITASDK/share/src" \
+ && git -C /tmp/vitaShaRK archive --format=tar.gz --prefix=vitaShaRK/ -o "$VITASDK/share/src/vitaShaRK.tar.gz" HEAD \
+ && git -C /tmp/vitaGL archive --format=tar.gz --prefix=vitaGL/ -o "$VITASDK/share/src/vitaGL.tar.gz" HEAD
 
 FROM debian:trixie-slim@sha256:8aa5a7bf5a1955bddbe7d74fcdd0b91ab30e74362a8b73af672b0481b35b44a0
 ARG GRADLE_VERSION=9.9.0
@@ -16,7 +19,7 @@ ARG GRADLE_SHA256=0b00b0ffe07c4d4789c12d4935a44a7057d55774b7540bd4a3f76f336deb17
 ARG REVISION=unknown
 LABEL org.opencontainers.image.source=https://github.com/mmrmagno/stspsvita \
       org.opencontainers.image.description="Builds the STSPSVITA game files from your own copy of Slay the Spire. Contains no game code or assets." \
-      org.opencontainers.image.licenses=MIT
+      org.opencontainers.image.licenses="MIT AND LGPL-3.0-only"
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential ca-certificates cmake curl ffmpeg imagemagick \
       openjdk-21-jdk-headless pngquant python3 unzip \

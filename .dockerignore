@@ -9,6 +9,7 @@
 !Makefile
 !build.sh
 !LICENSE
+!LICENSES
 **/__pycache__
 transpiler/build
 transpiler/.gradle
