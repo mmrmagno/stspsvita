@@ -9,8 +9,7 @@ releases.
 ## Why
 
 I wanted to play Slay the Spire on my Vita and there was no way to do it. The PC version is
-a Java game and the Vita cannot run Java (or at least not without emulation), so I compile the game's bytecode to native ARM
-code instead.
+a Java game and the Vita cannot run Java (or at least not without emulation).
 
 ## What it does
 
@@ -19,9 +18,6 @@ code instead.
 - Saves are the same files as on PC, and a tool copies your PC progress over.
 - The launcher says what is missing and how to fix it.
 - The build has no network access and can only read your game folder.
-
-The build makes `SlayTheSpire.vpk`, the launcher with the game's own bubble and LiveArea.
-The `STSPSVITA.vpk` in the releases is the same launcher with plain art.
 
 Keep what you build to yourself. It is the game, compiled from your copy.
 
@@ -66,9 +62,8 @@ Needs:
    ```
 
 3. Install `ux0:SlayTheSpire.vpk` with VitaShell.
-4. Start Slay the Spire. The first start installs the game and takes a bit longer.
 
-On Windows, put `python` in front of the `tools/` commands.
+Start Slay the Spire. The first start installs the game and takes a bit longer.
 
 ## Updating
 
@@ -132,13 +127,12 @@ If the game crashes, please
 ## How it works
 
 - The jar is checked against the version I tested, then unpacked. Textures are converted for
-  the Vita's GPU, audio is re-encoded, and fonts you do not need are dropped.
+  the Vita's GPU, audio is re-encoded, and unneeded fonts are dropped.
 - TeaVM turns the game's bytecode into C, and VitaSDK compiles that to ARM.
 - `backend/` replaces desktop libGDX: graphics through vitaGL, sound through OpenAL, and the
   Vita's buttons, touch screen and files.
 - The launcher verifies the game's checksum, copies it into its own app folder once, and
   starts it from there.
-- The same jar and the same builder image give the same game, byte for byte.
 
 ## Building
 
@@ -151,8 +145,6 @@ vitaGL and vitaShaRK versions I tested with, see `docker/Dockerfile`.
 ```
 
 The files for the Vita end up in `out/`. After one full build, `--incremental` rebuilds only
-the native code. `make launcher` builds the public `STSPSVITA.vpk`.
-
-`make test` needs neither the game nor a Vita, and CI runs it on every pull request.
+the native code. `make launcher` builds the launcher without bundled game files.
 
 I write about my projects at [marc-os.com](https://marc-os.com) [post on this](https://marc-os.com/blog/stspsvita-building-a-slay-the-spire-vita-pipeline).
