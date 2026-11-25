@@ -9,7 +9,7 @@ releases.
 ## Why
 
 I wanted to play Slay the Spire on my Vita and there was no way to do it. The PC version is
-a Java game and the Vita cannot run Java, so I compile the game's bytecode to native ARM
+a Java game and the Vita cannot run Java (or at least not without emulation), so I compile the game's bytecode to native ARM
 code instead.
 
 ## What it does
