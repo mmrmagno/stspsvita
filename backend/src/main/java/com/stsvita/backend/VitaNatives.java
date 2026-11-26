@@ -110,6 +110,10 @@ public final class VitaNatives {
     @Import(name = "stsv_touch_y")
     public static native int touchY(int finger);
 
+    /** Rear-panel tap this frame: 0 none, 1 left half, 2 right half. */
+    @Import(name = "stsv_rear_tap")
+    public static native int rearTap();
+
     /* --- convenience (implemented in Java, routed once, replaced when a
            direct sceClibPrintf hook is worth it) --- */
 

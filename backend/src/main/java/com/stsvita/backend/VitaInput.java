@@ -58,7 +58,7 @@ public class VitaInput implements Input {
     };
 
     private final VitaController controller = new VitaController();
-    private final float[] prevAxes = new float[4];
+    private final float[] prevAxes = new float[5];
     private com.badlogic.gdx.controllers.PovDirection prevPov =
             com.badlogic.gdx.controllers.PovDirection.center;
 
@@ -99,6 +99,11 @@ public class VitaInput implements Input {
         dispatchAxis(1, deadzone(VitaNatives.ctrlAxis(0)));
         dispatchAxis(2, deadzone(VitaNatives.ctrlAxis(3)));
         dispatchAxis(3, deadzone(VitaNatives.ctrlAxis(2)));
+
+        // Axis 4 is the Xbox trigger pair StS binds to the piles: +1 LT draw
+        // pile, -1 RT discard pile. A rear tap pulses it for one frame.
+        int tap = VitaNatives.rearTap();
+        dispatchAxis(4, tap == 1 ? 1f : tap == 2 ? -1f : 0f);
     }
 
     private void dispatchAxis(int stsAxis, float value) {

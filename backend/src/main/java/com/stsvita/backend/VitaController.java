@@ -14,12 +14,12 @@ import com.badlogic.gdx.utils.Array;
  * registers via the Controllers stub. Button indices follow StS's
  * CInputActionSet defaults (Xbox layout): 0=confirm 1=cancel 2=view
  * 3=proceed 4=pageLeft 5=pageRight 6=map 7=settings; axes 0/1=left stick
- * Y/X, 2/3=right stick Y/X; dpad is the POV hat.
+ * Y/X, 2/3=right stick Y/X, 4=triggers (rear-panel taps); dpad is the POV hat.
  */
 public class VitaController implements Controller {
 
     private final boolean[] buttons = new boolean[16];
-    private final float[] axes = new float[4];
+    private final float[] axes = new float[5];
     private PovDirection pov = PovDirection.center;
     private final Array<ControllerListener> listeners = new Array<>();
 

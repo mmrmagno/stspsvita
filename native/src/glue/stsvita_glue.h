@@ -53,6 +53,7 @@ float stsv_ctrl_axis(int32_t axis);
 int32_t stsv_touch_count(void);
 int32_t stsv_touch_x(int32_t finger);
 int32_t stsv_touch_y(int32_t finger);
+int32_t stsv_rear_tap(void);
 
 /* --- OpenAL audio (audio_glue.c) ------------------------------------------
  * Music handles are pointers packed into int64_t. Without these prototypes a

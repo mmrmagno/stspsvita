@@ -172,3 +172,7 @@ int32_t stsv_touch_y(int32_t finger) {
     (void) finger;
     return mouse_y;
 }
+
+int32_t stsv_rear_tap(void) {
+    return 0;
+}
