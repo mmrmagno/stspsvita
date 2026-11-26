@@ -19,6 +19,8 @@
 #define TEXT RGBA8(0xe6, 0xe6, 0xe6, 0xff)
 #define DIM RGBA8(0x9a, 0xa0, 0xac, 0xff)
 #define BAD RGBA8(0xe0, 0x6c, 0x75, 0xff)
+#define PANEL RGBA8(0x0c, 0x0e, 0x12, 0xe0)
+#define LINE RGBA8(0xb8, 0x96, 0x4a, 0xff)
 
 static vita2d_pgf *font;
 static stsv_manifest manifest;
@@ -30,26 +32,48 @@ typedef struct {
     char body[512];
 } problem;
 
+static vita2d_texture *background;
+
+/* The game's own loading screen, from the user's build; the VPK ships no game art. */
+static void load_background(void) {
+    if (background) return;
+    background = vita2d_load_PNG_file(DATA_DIR "loading.png");
+    if (background && (vita2d_texture_get_width(background) != 960 ||
+                       vita2d_texture_get_height(background) != 544)) {
+        vita2d_free_texture(background);
+        background = NULL;
+    }
+}
+
+static void draw_background(void) {
+    load_background();
+    if (!background) return;
+    vita2d_draw_texture_part(background, 0, 0, 0, 110, 960, 330);
+    vita2d_draw_texture_part_scale(background, 0, 330, 0, 439, 960, 1, 1.0f, 214.0f);
+    vita2d_draw_rectangle(0, 0, 960, 544, RGBA8(0, 0, 0, 0x4c));
+}
+
 static void draw(const char *title, unsigned title_color, const char *body, const char *hint) {
+    static const char footer[] = "STSPSVITA launcher " STSV_VERSION ", made by mmrmagno";
     char line[128];
-    int y = 170;
+    int y = 350;
     vita2d_start_drawing();
     vita2d_clear_screen();
-    vita2d_pgf_draw_text(font, 60, 80, GOLD, 1.0f, "STSPSVITA");
-    vita2d_pgf_draw_text(font, 60, 108, DIM, 0.8f,
-                         "Launcher " STSV_VERSION ", unofficial, not affiliated with Mega Crit");
-    vita2d_pgf_draw_text(font, 60, y, title_color, 1.0f, title);
-    y += 42;
-    while (*body && y < 480) {
+    draw_background();
+    vita2d_draw_rectangle(100, 262, 760, 246, PANEL);
+    vita2d_pgf_draw_text(font, 130, 300, title_color, 1.2f, title);
+    vita2d_draw_line(130, 316, 830, 316, LINE);
+    while (*body && y < 470) {
         size_t n = strcspn(body, "\n");
         size_t c = n < sizeof(line) - 1 ? n : sizeof(line) - 1;
         memcpy(line, body, c);
         line[c] = 0;
-        vita2d_pgf_draw_text(font, 60, y, TEXT, 1.0f, line);
-        y += 30;
+        vita2d_pgf_draw_text(font, 130, y, TEXT, 1.0f, line);
+        y += 28;
         body += n + (body[n] == '\n');
     }
-    vita2d_pgf_draw_text(font, 60, 516, DIM, 0.9f, hint);
+    vita2d_pgf_draw_text(font, 130, 494, DIM, 0.9f, hint);
+    vita2d_pgf_draw_text(font, (960 - vita2d_pgf_text_width(font, 0.7f, footer)) / 2, 534, DIM, 0.7f, footer);
     vita2d_end_drawing();
     vita2d_swap_buffers();
 }

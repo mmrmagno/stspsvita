@@ -8,7 +8,7 @@ project(STSPSVITA C)
 include("${VITASDK}/share/vita.cmake" REQUIRED)
 
 set(STSV_TITLEID "STSV00001")
-set(STSV_VERSION "01.00")
+set(STSV_VERSION "01.01")
 set(APP_NAME "STSPSVITA" CACHE STRING "bubble name")
 set(SCE_SYS "${CMAKE_CURRENT_SOURCE_DIR}/sce_sys" CACHE PATH "bubble and LiveArea art")
 set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d ATTRIBUTE2=12")

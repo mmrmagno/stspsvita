@@ -34,6 +34,16 @@ int vita2d_init(void); void vita2d_set_clear_color(unsigned); vita2d_pgf *vita2d
 void vita2d_start_drawing(void); void vita2d_clear_screen(void); void vita2d_end_drawing(void);
 void vita2d_swap_buffers(void); void vita2d_wait_rendering_done(void);
 int vita2d_pgf_draw_text(vita2d_pgf *, int, int, unsigned, float, const char *);
+int vita2d_pgf_text_width(vita2d_pgf *, float, const char *);
+typedef struct vita2d_texture vita2d_texture;
+vita2d_texture *vita2d_load_PNG_file(const char *); void vita2d_free_texture(vita2d_texture *);
+unsigned vita2d_texture_get_width(const vita2d_texture *);
+unsigned vita2d_texture_get_height(const vita2d_texture *);
+void vita2d_draw_texture_part(const vita2d_texture *, float, float, float, float, float, float);
+void vita2d_draw_texture_part_scale(const vita2d_texture *, float, float, float, float, float, float,
+                                    float, float);
+void vita2d_draw_rectangle(float, float, float, float, unsigned);
+void vita2d_draw_line(float, float, float, float, unsigned);
 #endif
 """
 
@@ -108,6 +118,24 @@ int vita2d_pgf_draw_text(vita2d_pgf *f, int x, int y, unsigned c, float s, const
     (void) f; (void) x; (void) y; (void) c; (void) s;
     printf("TEXT %s\n", t);
     return 0;
+}
+int vita2d_pgf_text_width(vita2d_pgf *f, float s, const char *t) { (void) f; (void) s; return (int) strlen(t); }
+vita2d_texture *vita2d_load_PNG_file(const char *p) { (void) p; return NULL; }
+void vita2d_free_texture(vita2d_texture *t) { (void) t; }
+unsigned vita2d_texture_get_width(const vita2d_texture *t) { (void) t; return 0; }
+unsigned vita2d_texture_get_height(const vita2d_texture *t) { (void) t; return 0; }
+void vita2d_draw_texture_part(const vita2d_texture *t, float a, float b, float c, float d, float e, float f) {
+    (void) t; (void) a; (void) b; (void) c; (void) d; (void) e; (void) f;
+}
+void vita2d_draw_texture_part_scale(const vita2d_texture *t, float a, float b, float c, float d, float e,
+                                    float f, float g, float h) {
+    (void) t; (void) a; (void) b; (void) c; (void) d; (void) e; (void) f; (void) g; (void) h;
+}
+void vita2d_draw_rectangle(float a, float b, float c, float d, unsigned e) {
+    (void) a; (void) b; (void) c; (void) d; (void) e;
+}
+void vita2d_draw_line(float a, float b, float c, float d, unsigned e) {
+    (void) a; (void) b; (void) c; (void) d; (void) e;
 }
 """
 
