@@ -2,6 +2,7 @@ package com.stsvita.backend;
 
 import com.badlogic.gdx.Files;
 import com.badlogic.gdx.files.FileHandle;
+import com.stsvita.gen.BuildFlags;
 
 /**
  * File access on the Vita. Newlib routes stdio through sceIo, so standard
@@ -14,7 +15,8 @@ import com.badlogic.gdx.files.FileHandle;
  */
 public class VitaFiles implements Files {
 
-    public static final String DATA = "ux0:data/stsvita/";
+    private static final String ROOT = "ux0:data/stsvita/";
+    public static final String DATA = BuildFlags.BENCH ? ROOT + "bench/" : ROOT;
 
     /**
      * Where the read-only asset payload lives. The full VPK bundles it at
@@ -94,6 +96,6 @@ public class VitaFiles implements Files {
         }
         return new java.io.File("app0:/assets").exists()
                 ? "app0:/assets/"
-                : DATA + "assets/";
+                : ROOT + "assets/";
     }
 }

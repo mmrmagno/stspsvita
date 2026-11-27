@@ -51,6 +51,20 @@ tasks.register('typeManifest', Exec) {
 compileJava.dependsOn 'typeManifest'
 processResources.dependsOn 'typeManifest'
 
+def benchBuild = providers.environmentVariable('STSV_BENCH').orElse('0').get() == '1'
+tasks.register('buildFlags') {
+    def out = file("${workDir}/gen/java/com/stsvita/gen/BuildFlags.java")
+    inputs.property('bench', benchBuild)
+    outputs.file(out)
+    doLast {
+        out.parentFile.mkdirs()
+        out.text = "package com.stsvita.gen;\n\npublic final class BuildFlags {\n" +
+                "    public static final boolean BENCH = ${benchBuild};\n\n" +
+                "    private BuildFlags() {}\n}\n"
+    }
+}
+compileJava.dependsOn 'buildFlags'
+
 // TeaVM version is pinned: the C backend moves fast and we vendor patches
 // against exactly this release (tools/vita_patch_runtime.py).
 def teavmVersion = '0.15.0'

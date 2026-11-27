@@ -100,8 +100,40 @@ static void pump_events(void) {
     }
 }
 
+#ifdef STSV_BENCH
+#include <SDL2/SDL_opengl.h>
+
+static int32_t bench_capture_id = -1;
+
+void stsv_bench_capture(int32_t id) {
+    bench_capture_id = id;
+}
+
+static void bench_capture(void) {
+    static unsigned char pixels[960 * 544 * 3];
+    char name[32];
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, 960, 544, GL_RGB, GL_UNSIGNED_BYTE, pixels);
+    snprintf(name, sizeof name, "cap_%04d.ppm", (int) bench_capture_id);
+    FILE *f = fopen(name, "wb");
+    if (f) {
+        fprintf(f, "P6\n960 544\n255\n");
+        for (int y = 543; y >= 0; y--) {
+            fwrite(pixels + y * 960 * 3, 1, 960 * 3, f);
+        }
+        fclose(f);
+    }
+    bench_capture_id = -1;
+}
+#endif
+
 void stsv_swap_buffers(void) {
     ensure_window();
+#ifdef STSV_BENCH
+    if (bench_capture_id >= 0) {
+        bench_capture();
+    }
+#endif
     SDL_GL_SwapWindow(window);
     pump_events();
 }

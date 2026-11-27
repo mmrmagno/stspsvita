@@ -1,5 +1,6 @@
 package com.megacrit.cardcrawl.helpers;
 
+import com.stsvita.gen.BuildFlags;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
@@ -18,6 +19,9 @@ import java.nio.charset.StandardCharsets;
 public final class AsyncSaver {
 
     public static void save(String filepath, String data) {
+        if (BuildFlags.BENCH && filepath.indexOf(':') < 0) {
+            filepath = "bench/" + filepath;
+        }
         long t0 = System.nanoTime();
         java.io.File parent = new java.io.File(filepath).getParentFile();
         if (parent != null) {

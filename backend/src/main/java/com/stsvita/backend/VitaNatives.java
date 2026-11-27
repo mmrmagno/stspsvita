@@ -61,6 +61,13 @@ public final class VitaNatives {
     @Import(name = "stsv_upload_frame_stats")
     public static native long uploadFrameStats();
 
+    /** Index 0 GCs, 1 full GCs, 2 GC us, 3 bytes allocated. */
+    @Import(name = "stsv_bench_gc_stat")
+    public static native long benchGcStat(int which);
+
+    @Import(name = "stsv_bench_capture")
+    public static native void benchCapture(int id);
+
     /** Read-only guard preview: would a texture of this byte size be admitted
      * right now? Lets VitaFileHandle skip the SD read of a doomed .dds. */
     @Import(name = "stsv_tex_would_fit")

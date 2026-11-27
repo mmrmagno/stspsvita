@@ -12,6 +12,7 @@ Idempotent and anchor-based: safe to re-run after every transpile, tolerant of
 line-number drift. Run by the gradle `transpile` task; a no-op for the host
 (desktop-GL) build, which never defines TEAVM_VITA.
 """
+import re
 import sys
 from pathlib import Path
 
@@ -346,6 +347,17 @@ def patch_gc_timing(path: Path) -> bool:
         "#include <stdio.h>\n"
         "extern int64_t teavm_currentTimeNano(void);\n"
         "static int64_t stsv_gc_last_end_ns;\n"
+        "#ifdef STSV_BENCH\n"
+        "int64_t stsv_bench_gc_count, stsv_bench_gc_full, stsv_bench_gc_ns, stsv_bench_alloc;\n"
+        "int32_t stsv_bench_free_after;\n"
+        "int64_t stsv_bench_gc_stat(int32_t which) {\n"
+        "    if (which == 0) return stsv_bench_gc_count;\n"
+        "    if (which == 1) return stsv_bench_gc_full;\n"
+        "    if (which == 2) return stsv_bench_gc_ns / 1000;\n"
+        "    int64_t live = stsv_bench_free_after ? (int64_t) stsv_bench_free_after - sfld_otr_GC_freeMemory : 0;\n"
+        "    return stsv_bench_alloc + (live > 0 ? live : 0);\n"
+        "}\n"
+        "#endif\n"
         "static void meth_otr_GC_doCollectGarbage_stsv_inner(void);\n"
         "void meth_otr_GC_doCollectGarbage() {\n"
         "    int64_t stsv_t0 = teavm_currentTimeNano();\n"
@@ -365,6 +377,13 @@ def patch_gc_timing(path: Path) -> bool:
         "                (long long) stsv_dt);\n"
         "    }\n"
         "    stsv_gc_last_end_ns = stsv_t1;\n"
+        "#ifdef STSV_BENCH\n"
+        "    stsv_bench_gc_count++;\n"
+        "    stsv_bench_gc_full += stsv_full ? 1 : 0;\n"
+        "    stsv_bench_gc_ns += stsv_t1 - stsv_t0;\n"
+        "    if (stsv_bench_free_after) stsv_bench_alloc += (int64_t) stsv_bench_free_after - stsv_free0;\n"
+        "    stsv_bench_free_after = sfld_otr_GC_freeMemory;\n"
+        "#endif\n"
         "}\n"
         "static void meth_otr_GC_doCollectGarbage_stsv_inner() {"
     )
@@ -443,6 +462,65 @@ def patch_time_clock(path: Path) -> bool:
     return True
 
 
+def patch_string_equals(path: Path) -> bool:
+    text = path.read_text()
+    if "STSVITA: string equals" in text:
+        return False
+    start = "int32_t meth_jl_String_equals(void* teavm_this_, void* teavm_local_1) {"
+    si = text.find(start)
+    ei = text.find("\n}\n", si)
+    if si < 0 or ei < 0:
+        raise SystemExit("String.c: meth_jl_String_equals anchors not found")
+    new_fn = (
+        start + "\n"
+        "    /* STSVITA: string equals */\n"
+        "    TeaVM_Array* teavm_stsv_a;\n"
+        "    TeaVM_Array* teavm_stsv_b;\n"
+        "    int32_t teavm_stsv_ha;\n"
+        "    int32_t teavm_stsv_hb;\n"
+        "    if (teavm_this_ == teavm_local_1) { return INT32_C(1); }\n"
+        "    if (!teavm_instanceof(teavm_local_1, &jl_String_Cls, &supertypeof_jl_String)) { return INT32_C(0); }\n"
+        "    teavm_stsv_a = TEAVM_FIELD(teavm_this_, TeaVM_String, characters);\n"
+        "    teavm_stsv_b = TEAVM_FIELD(teavm_local_1, TeaVM_String, characters);\n"
+        "    if (TEAVM_ARRAY_LENGTH(teavm_stsv_a) != TEAVM_ARRAY_LENGTH(teavm_stsv_b)) { return INT32_C(0); }\n"
+        "    teavm_stsv_ha = TEAVM_FIELD(teavm_this_, TeaVM_String, hashCode);\n"
+        "    teavm_stsv_hb = TEAVM_FIELD(teavm_local_1, TeaVM_String, hashCode);\n"
+        "    if (teavm_stsv_ha && teavm_stsv_hb && teavm_stsv_ha != teavm_stsv_hb) { return INT32_C(0); }\n"
+        "    return __builtin_memcmp(TEAVM_ARRAY_DATA(teavm_stsv_a, char16_t), TEAVM_ARRAY_DATA(teavm_stsv_b, char16_t),\n"
+        "                  (size_t) TEAVM_ARRAY_LENGTH(teavm_stsv_a) * sizeof(char16_t)) == 0;"
+    )
+    text = text[:si] + new_fn + text[ei:]
+    path.write_text(text)
+    return True
+
+
+def patch_arraylist_remove(path: Path) -> bool:
+    text = path.read_text()
+    if "STSVITA: arraylist remove" in text:
+        return False
+    si = text.find("void* meth_ju_ArrayList_remove(void* teavm_this_, int32_t teavm_local_1) {")
+    ei = text.find("\n}\n", si)
+    if si < 0 or ei < 0:
+        raise SystemExit("ArrayList.c: meth_ju_ArrayList_remove anchors not found")
+    body = text[si:ei]
+    loop = re.search(r"    while \(1\) \{\n        if \(!\(teavm_local_3 < teavm_local_5\)\) break;\n.*?\n    \}\n", body, re.S)
+    if loop is None or "teavm_gc_writeBarrier(teavm_local_2);" not in loop.group(0):
+        raise SystemExit("ArrayList.c: remove shift loop not found")
+    fast = (
+        "    /* STSVITA: arraylist remove */\n"
+        "    if (teavm_local_3 < teavm_local_5) {\n"
+        "        __builtin_memmove(&TEAVM_ARRAY_AT(teavm_local_2, void*, teavm_local_3),\n"
+        "                          &TEAVM_ARRAY_AT(teavm_local_2, void*, teavm_local_3 + 1),\n"
+        "                          (size_t) (teavm_local_5 - teavm_local_3) * sizeof(void*));\n"
+        "        teavm_gc_writeBarrier(teavm_local_2);\n"
+        "    }\n"
+    )
+    body = body[:loop.start()] + fast + body[loop.end():]
+    text = text[:si] + body + text[ei:]
+    path.write_text(text)
+    return True
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("usage: vita_patch_runtime.py <generated_c_dir>")
@@ -459,6 +537,8 @@ def main() -> None:
         ("reflection.c", patch_reflection_data_offset),
         ("time.c", patch_time_clock),
         ("classes/java/lang/Float.c", patch_float_tostring),
+        ("classes/java/lang/String.c", patch_string_equals),
+        ("classes/java/util/ArrayList.c", patch_arraylist_remove),
         ("classes/org/teavm/runtime/GC.c", patch_gc_timing),
         ("classes/com/megacrit/cardcrawl/screens/options/DropdownMenu.c",
          patch_dropdown_guard),

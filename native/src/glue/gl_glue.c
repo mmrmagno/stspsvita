@@ -100,6 +100,12 @@ void stsv_swap_buffers(void) {
     vglSwapBuffers(stsv_ime_active() ? GL_TRUE : GL_FALSE);
 }
 
+#ifdef STSV_BENCH
+void stsv_bench_capture(int32_t id) {
+    (void) id;
+}
+#endif
+
 void stsv_set_vsync(int on) {
     vsync_on = on;
     /* Stored only, vitaGL keeps its own swap interval. */

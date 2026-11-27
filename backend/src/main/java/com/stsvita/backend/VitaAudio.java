@@ -24,6 +24,12 @@ public class VitaAudio implements Audio {
 
     @Import(name = "stsv_sound_load")
     static native int nSoundLoad(Address data, int len);
+
+    @Import(name = "stsv_sound_load_path")
+    static native int nSoundLoadPath(Address utf8, int len);
+
+    @Import(name = "stsv_sound_pump")
+    static native void nSoundPump();
     @Import(name = "stsv_sound_free")
     static native void nSoundFree(int buffer);
     @Import(name = "stsv_sound_play")
@@ -67,6 +73,7 @@ public class VitaAudio implements Audio {
 
     /** Called each frame from VitaApplication to refill music stream buffers. */
     public static void update() {
+        nSoundPump();
         for (int i = 0; i < ACTIVE.size(); i++) {
             VitaMusic m = ACTIVE.get(i);
             if (m.handle != 0) {
@@ -88,6 +95,13 @@ public class VitaAudio implements Audio {
 
     @Override
     public Sound newSound(FileHandle fileHandle) {
+        if (fileHandle instanceof VitaFileHandle && "ogg".equalsIgnoreCase(fileHandle.extension())) {
+            byte[] utf8 = fileHandle.path().getBytes();
+            int queued = nSoundLoadPath(Address.ofData(utf8), utf8.length);
+            if (queued >= 0) {
+                return new VitaSound(queued);
+            }
+        }
         byte[] ogg = fileHandle.readBytes();
         if (ogg.length == 0) {
             return new VitaSound(0);

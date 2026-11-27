@@ -13,6 +13,7 @@ import com.badlogic.gdx.Net;
 import com.badlogic.gdx.Preferences;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Clipboard;
+import com.stsvita.gen.BuildFlags;
 
 /**
  * libGDX 1.9.5 Application for the PS Vita.
@@ -28,6 +29,14 @@ public class VitaApplication implements Application {
         public int height = 544;
         public boolean vsync = true;
     }
+
+    public interface FrameHook {
+        void beforeRender();
+
+        void afterFrame(long frameUs, long gameUs, long swapUs, long up, long stb, long io);
+    }
+
+    public static FrameHook frameHook;
 
     private final ApplicationListener listener;
     private final VitaGraphics graphics;
@@ -84,6 +93,9 @@ public class VitaApplication implements Application {
             input.update();
             VitaAudio.update(); // refill streaming-music buffers
             executeRunnables();
+            if (BuildFlags.BENCH && frameHook != null) {
+                frameHook.beforeRender();
+            }
             long gameStart = VitaNatives.micros();
             listener.render();
             long swapStart = VitaNatives.micros();
@@ -100,6 +112,10 @@ public class VitaApplication implements Application {
             long up = VitaNatives.uploadFrameStats();
             long io = VitaFileHandle.drainIoStats();   // ALL reads, incl. the
             long stat = VitaFileHandle.drainStatStats(); // sub-100ms tail
+            if (BuildFlags.BENCH && frameHook != null) {
+                frameHook.afterFrame(frameEnd - hitchStart, swapStart - gameStart,
+                        frameEnd - swapStart, up, stb, io);
+            }
             if (frameMs > 200L) {
                 // wall >> process means the console was suspended/minimized
                 // mid-frame, not a real stall (process time pauses, RTC not).
