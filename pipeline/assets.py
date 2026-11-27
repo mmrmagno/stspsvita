@@ -98,6 +98,45 @@ def run_audio_jobs(jobs: list[tuple[Path, Path]], kbps: int,
         return [r for r in ex.map(one, jobs) if r is not None]
 
 
+CJK_TEXT_DIRS = {"zhs": ("zhs",), "zht": ("zht",), "jpn": ("jpn", "jpn2"), "kor": ("kor",)}
+
+
+def font_chars(src_root: Path, font_dir: str) -> set[int]:
+    chars = set(range(0x20, 0x7f))
+    for lang in CJK_TEXT_DIRS[font_dir]:
+        for f in sorted((src_root / "localization" / lang).rglob("*")):
+            if f.is_file():
+                chars.update(ord(c) for c in f.read_text(encoding="utf-8", errors="replace"))
+    return chars
+
+
+def subset_cjk_fonts(src_root: Path, dst_root: Path, font_dirs: set[str]) -> tuple[int, int]:
+    """The game holds every font file in memory all session; full zhs is 65MB of a 128MB native heap."""
+    if not font_dirs:
+        return 0, 0
+    try:
+        from fontTools import subset
+        from fontTools.ttLib import TTFont
+    except ImportError:
+        sys.exit("error: keeping CJK languages needs fontTools (Debian: python3-fonttools)")
+    before = after = 0
+    for font_dir in sorted(font_dirs):
+        chars = font_chars(src_root, font_dir)
+        for path in sorted((dst_root / "font" / font_dir).glob("*.[ot]tf")):
+            before += path.stat().st_size
+            font = TTFont(path, recalcTimestamp=False)
+            opts = subset.Options()
+            opts.layout_features = ["*"]
+            opts.name_IDs = ["*"]
+            opts.notdef_outline = True
+            sub = subset.Subsetter(opts)
+            sub.populate(unicodes=chars)
+            sub.subset(font)
+            font.save(path)
+            after += path.stat().st_size
+    return before, after
+
+
 def build_dds_encoder(work: Path) -> Path:
     exe = work / "tools" / "ddsenc"
     src = Path("tools/ddsenc.c")
@@ -356,6 +395,8 @@ def main() -> int:
             shutil.copy2(src, dst)
         copied += 1
 
+    fonts_before, fonts_after = subset_cjk_fonts(src_root, dst_root, CJK_FONT_DIRS & langs)
+
     audio_failed = []
     if audio_jobs:
         audio_failed = run_audio_jobs(audio_jobs, args.audio_kbps, args.jobs)
@@ -419,6 +460,9 @@ def main() -> int:
     print(f"assets: {copied} files -> {dst_root} ({tree_mb(dst_root):.1f} MB, "
           f"was {tree_mb(src_root):.1f} MB); "
           f"dropped {dropped} font files for languages not in {sorted(langs)}")
+    if fonts_before:
+        print(f"fonts: CJK fonts cut to the game's characters, "
+              f"{fonts_before / 1048576:.1f} MB -> {fonts_after / 1048576:.1f} MB")
     if not args.no_dds:
         print(f"dds: encoded {dds_encoded} (+{dds_half} half-res, "
               f"+{dds_quarter} quarter-res), "

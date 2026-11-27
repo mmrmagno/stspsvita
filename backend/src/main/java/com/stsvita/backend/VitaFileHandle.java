@@ -16,7 +16,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * FileHandle whose path is already resolved to a Vita mount
@@ -35,6 +37,7 @@ public class VitaFileHandle extends FileHandle {
     private static long statUs;
     private static int statCount;
     private static final Map<String, byte[]> doomedDdsHeaders = new HashMap<>();
+    private static final Set<String> warnedLanguages = new HashSet<>();
 
     // Read-back cache for image payloads. StS loads several
     // textures with new-Texture-per-view + dispose-on-close semantics
@@ -470,6 +473,7 @@ public class VitaFileHandle extends FileHandle {
         if (isMissingCjkFont(p)) {
             int font = p.indexOf("/font/");
             String root = p.substring(0, font + "/font/".length());
+            warnMissingLanguage(p);
             String[] candidates = p.contains("Bold")
                     ? new String[] {"Kreon-Bold.ttf", "NotoSans-Regular.ttf"}
                     : new String[] {"NotoSans-Regular.ttf", "Kreon-Regular.ttf"};
@@ -481,6 +485,17 @@ public class VitaFileHandle extends FileHandle {
             }
         }
         return null;
+    }
+
+    private static void warnMissingLanguage(String p) {
+        int start = p.indexOf("/font/") + "/font/".length();
+        String lang = p.substring(start, start + 3);
+        // leaderboardFont loads the zhs mono font in every language.
+        if (p.endsWith("/zhs/NotoSansMonoCJKsc-Regular.otf") || !warnedLanguages.add(lang)) {
+            return;
+        }
+        VitaNatives.log("[font] " + lang + " fonts are not installed, its text will be blank."
+                + " Build with --langs eng," + lang);
     }
 
     private boolean isMissingCjkFont(String p) {

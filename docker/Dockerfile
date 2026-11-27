@@ -22,7 +22,7 @@ LABEL org.opencontainers.image.source=https://github.com/mmrmagno/stspsvita \
       org.opencontainers.image.licenses="MIT AND LGPL-3.0-only"
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential ca-certificates cmake curl ffmpeg imagemagick \
-      openjdk-21-jdk-headless pngquant python3 unzip \
+      openjdk-21-jdk-headless pngquant python3 python3-fonttools unzip \
  && rm -rf /var/lib/apt/lists/*
 RUN curl -fsSLo /tmp/gradle.zip "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" \
  && echo "${GRADLE_SHA256}  /tmp/gradle.zip" | sha256sum -c - \

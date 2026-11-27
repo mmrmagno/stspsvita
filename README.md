@@ -76,7 +76,7 @@ Put these at the end of the `docker run` command:
 
 | Option | What it does |
 |---|---|
-| `--langs eng,jpn` | Keeps more languages. The default is English only, the other fonts add about 160 MB |
+| `--langs eng,zhs` | Keeps the fonts for Chinese (`zhs`, `zht`), Japanese (`jpn`) or Korean (`kor`), 1 to 4 MB each. Without it, text in those languages is blank |
 | `--audio-kbps 48` | Better audio. The default is 32, and 0 copies the original files |
 | `--allow-unsupported-input` | Tries a game version I have not tested |
 
@@ -137,8 +137,9 @@ If the game crashes, please
 ## Building
 
 `build.sh` does the same without the container. It needs VitaSDK, JDK 17 or newer, Gradle,
-CMake, Make, Python 3.9 or newer, GCC, ImageMagick 7 and ffmpeg. The container pins the
-vitaGL and vitaShaRK versions I tested with, see `docker/Dockerfile`.
+CMake, Make, Python 3.9 or newer, GCC, ImageMagick 7 and ffmpeg, plus fontTools for Chinese,
+Japanese or Korean. The container pins the vitaGL and vitaShaRK versions I tested with, see
+`docker/Dockerfile`.
 
 ```sh
 ./build.sh --sts-dir /path/to/SlayTheSpire
