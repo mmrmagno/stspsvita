@@ -16,6 +16,10 @@ HARNESS="$ROOT/work/harness"
 
 [ -d "$GEN" ] || { echo "run 'make transpile' first"; exit 2; }
 
+BENCH_DEF=
+[ "${STSV_BENCH:-0}" = 1 ] && BENCH_DEF=-DSTSV_BENCH=1
+export BENCH_DEF
+
 if [ "$1" != "--run-only" ]; then
     rm -rf "$OBJS" && mkdir -p "$OBJS"
     cd "$GEN"
@@ -23,14 +27,14 @@ if [ "$1" != "--run-only" ]; then
         o="'"$OBJS"'/$(echo {} | tr "/@" "__").o"
         gcc -std=gnu11 -D_GNU_SOURCE -include uchar.h \
             -include classes/java/lang/Class.h \
-            -I"'"$ROOT"'/native/src/glue" -c -O0 -w \
+            -I"'"$ROOT"'/native/src/glue" -c -O0 -w $BENCH_DEF \
             -Wno-error=incompatible-pointer-types \
             -Wno-error=int-conversion \
             -Wno-error=implicit-function-declaration \
             -o "$o" {}'
     for glue in host_glue misc_glue gl_common_glue freetype_glue audio_glue; do
         [ -f "$ROOT/native/src/glue/$glue.c" ] || continue
-        gcc -std=gnu11 -O2 -I"$ROOT/native/src/glue" \
+        gcc -std=gnu11 -O2 $BENCH_DEF -I"$ROOT/native/src/glue" \
             $(pkg-config --cflags freetype2 sdl2) $(pkg-config --cflags vorbisfile 2>/dev/null) -c \
             "$ROOT/native/src/glue/$glue.c" -o "$OBJS/$glue.o"
     done

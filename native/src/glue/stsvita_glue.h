@@ -16,6 +16,10 @@ int32_t stsv_is_host_harness(void);
 /* Wall-clock us (counts through suspend; misc_glue.c). */
 int64_t stsv_wall_us(void);
 
+/* Bench builds only (STSV_BENCH). */
+int64_t stsv_bench_gc_stat(int32_t which);
+void stsv_bench_capture(int32_t id);
+
 /* Enable the bounded post-boot texture spill (gl_common_glue.c). */
 void stsv_tex_spill_enable(void);
 
@@ -59,7 +63,9 @@ int32_t stsv_rear_tap(void);
  * Music handles are pointers packed into int64_t. Without these prototypes a
  * 64-bit host truncates them to 32 bits. */
 int32_t stsv_sound_load(const void *data, int32_t len);
+int32_t stsv_sound_load_path(const void *utf8, int32_t len);
 void    stsv_sound_free(int32_t buffer);
+void    stsv_sound_pump(void);
 int32_t stsv_sound_play(int32_t buffer, float volume, float pitch, float pan, int32_t loop);
 void    stsv_sound_stop(int32_t source);
 void    stsv_sound_pause(int32_t source);

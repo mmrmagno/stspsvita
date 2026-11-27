@@ -10,10 +10,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <pthread.h>
 
 static ALCdevice *g_device;
 static ALCcontext *g_context;
 static int g_ready;
+
+static void stsv_start_worker(void);
 
 #define STSV_SOURCE_POOL 30
 static ALuint g_sources[STSV_SOURCE_POOL];
@@ -46,6 +49,7 @@ void stsv_audio_init(void) {
         return;
     }
     alGenSources(STSV_SOURCE_POOL, g_sources);
+    stsv_start_worker();
     /* Keep every AL gain within [0, 1]: this mixer wraps instead of clamping. */
     alListenerf(AL_GAIN, 1.0f);
     g_ready = 1;
@@ -126,27 +130,44 @@ static int stsv_load_wav(const unsigned char *d, int len) {
     return (int) buffer;
 }
 
-/* Decode a whole .ogg (encoded bytes at data/len) into a new AL buffer. Returns
- * the buffer name (>0) or 0 on failure. Used for short SFX. */
-int stsv_sound_load(const void *data, int len) {
-    if (!g_ready || data == NULL || len <= 0) {
-        return 0;
-    }
-    if (len > 12 && memcmp(data, "RIFF", 4) == 0) {
-        return stsv_load_wav((const unsigned char *) data, len);
-    }
-    stsv_ogg_mem mem = { (const char *) data, (size_t) len, 0 };
+enum { STSV_JOB_QUEUED, STSV_JOB_DECODING, STSV_JOB_DONE, STSV_JOB_FAILED };
+
+typedef struct stsv_job {
+    ALuint buffer;
+    char *ogg;
+    int len;
+    char *path;
+    char *pcm;
+    size_t size;
+    ALenum format;
+    ALsizei rate;
+    int state;
+    int cancelled;
+    struct stsv_job *next;
+} stsv_job;
+
+typedef struct { ALuint buffer; ALuint source; int paused; } stsv_pending_play;
+
+#define STSV_PENDING_PLAYS 32
+static stsv_pending_play g_pending[STSV_PENDING_PLAYS];
+static stsv_job *g_jobs;
+static pthread_mutex_t g_jobs_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_jobs_cond = PTHREAD_COND_INITIALIZER;
+static int g_async;
+
+static char *stsv_decode_ogg(const char *data, int len, size_t *out_size, ALenum *out_format, ALsizei *out_rate) {
+    stsv_ogg_mem mem = { data, (size_t) len, 0 };
     ov_callbacks cbs = { stsv_ogg_read, stsv_ogg_seek, NULL, stsv_ogg_tell };
     OggVorbis_File vf;
     int ov_err = ov_open_callbacks(&mem, &vf, NULL, 0, cbs);
     if (ov_err != 0) {
         fprintf(stderr, "[audio] ov_open_callbacks failed err=%d (%d bytes, first=%02x%02x%02x%02x)\n",
                 ov_err, len,
-                (unsigned char) ((const char *) data)[0],
-                (unsigned char) ((const char *) data)[1],
-                (unsigned char) ((const char *) data)[2],
-                (unsigned char) ((const char *) data)[3]);
-        return 0;
+                (unsigned char) data[0],
+                (unsigned char) data[1],
+                (unsigned char) data[2],
+                (unsigned char) data[3]);
+        return NULL;
     }
     vorbis_info *vi = ov_info(&vf, -1);
     ALenum format = (vi->channels == 1) ? AL_FORMAT_MONO16 : AL_FORMAT_STEREO16;
@@ -163,14 +184,14 @@ int stsv_sound_load(const void *data, int len) {
         fprintf(stderr, "[audio] sound pcm malloc FAILED (%u bytes)\n",
                 (unsigned) cap);
         ov_clear(&vf);
-        return 0;
+        return NULL;
     }
     int bitstream;
     for (;;) {
         if (size + 4096 > cap) {
             cap *= 2;
             char *grown = (char *) realloc(pcm, cap);
-            if (grown == NULL) { free(pcm); ov_clear(&vf); return 0; }
+            if (grown == NULL) { free(pcm); ov_clear(&vf); return NULL; }
             pcm = grown;
         }
         long n = ov_read(&vf, pcm + size, 4096, 0, 2, 1, &bitstream); /* 16-bit LE signed */
@@ -180,6 +201,149 @@ int stsv_sound_load(const void *data, int len) {
     ov_clear(&vf);
 
     stsv_boost_pcm((short *) pcm, size / 2);
+    *out_size = size;
+    *out_format = format;
+    *out_rate = rate;
+    return pcm;
+}
+
+static char *stsv_read_file(const char *path, int *len) {
+    FILE *f = fopen(path, "rb");
+    if (f == NULL) {
+        fprintf(stderr, "[audio] open failed %s\n", path);
+        return NULL;
+    }
+    char *buf = NULL;
+    long size = fseek(f, 0, SEEK_END) == 0 ? ftell(f) : -1;
+    if (size > 0 && fseek(f, 0, SEEK_SET) == 0) {
+        buf = (char *) malloc((size_t) size);
+        if (buf != NULL && fread(buf, 1, (size_t) size, f) != (size_t) size) {
+            free(buf);
+            buf = NULL;
+        }
+    }
+    fclose(f);
+    *len = (int) size;
+    return buf;
+}
+
+static void *stsv_decode_worker(void *arg) {
+    (void) arg;
+    for (;;) {
+        pthread_mutex_lock(&g_jobs_lock);
+        stsv_job *job = NULL;
+        while (job == NULL) {
+            for (stsv_job *j = g_jobs; j; j = j->next) {
+                if (j->state == STSV_JOB_QUEUED) { job = j; break; }
+            }
+            if (job == NULL) pthread_cond_wait(&g_jobs_cond, &g_jobs_lock);
+        }
+        job->state = STSV_JOB_DECODING;
+        pthread_mutex_unlock(&g_jobs_lock);
+        size_t size = 0;
+        ALenum format = 0;
+        ALsizei rate = 0;
+        if (job->ogg == NULL && job->path != NULL) {
+            job->ogg = stsv_read_file(job->path, &job->len);
+        }
+        char *pcm = job->ogg ? stsv_decode_ogg(job->ogg, job->len, &size, &format, &rate) : NULL;
+        pthread_mutex_lock(&g_jobs_lock);
+        job->pcm = pcm;
+        job->size = size;
+        job->format = format;
+        job->rate = rate;
+        job->state = pcm ? STSV_JOB_DONE : STSV_JOB_FAILED;
+        pthread_mutex_unlock(&g_jobs_lock);
+    }
+    return NULL;
+}
+
+static void stsv_start_worker(void) {
+    pthread_t thread;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, 256 * 1024);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    g_async = pthread_create(&thread, &attr, stsv_decode_worker, NULL) == 0;
+    pthread_attr_destroy(&attr);
+    if (!g_async) {
+        fprintf(stderr, "[audio] decode thread failed, decoding inline\n");
+    }
+}
+
+static int stsv_buffer_pending(ALuint buffer) {
+    int pending = 0;
+    pthread_mutex_lock(&g_jobs_lock);
+    for (stsv_job *j = g_jobs; j; j = j->next) {
+        if (j->buffer == buffer && !j->cancelled) { pending = 1; break; }
+    }
+    pthread_mutex_unlock(&g_jobs_lock);
+    return pending;
+}
+
+static void stsv_drop_pending_source(ALuint source) {
+    for (int i = 0; i < STSV_PENDING_PLAYS; i++) {
+        if (g_pending[i].source == source) g_pending[i].source = g_pending[i].buffer = 0;
+    }
+}
+
+static int stsv_source_reserved(ALuint source) {
+    for (int i = 0; i < STSV_PENDING_PLAYS; i++) {
+        if (g_pending[i].source == source) return 1;
+    }
+    return 0;
+}
+
+void stsv_sound_pump(void) {
+    if (!g_async) return;
+    stsv_job *done = NULL;
+    pthread_mutex_lock(&g_jobs_lock);
+    stsv_job **link = &g_jobs;
+    while (*link) {
+        stsv_job *j = *link;
+        if (j->state == STSV_JOB_DONE || j->state == STSV_JOB_FAILED) {
+            *link = j->next;
+            j->next = done;
+            done = j;
+        } else {
+            link = &j->next;
+        }
+    }
+    pthread_mutex_unlock(&g_jobs_lock);
+    while (done) {
+        stsv_job *j = done;
+        done = j->next;
+        int ok = !j->cancelled && j->state == STSV_JOB_DONE;
+        if (ok) {
+            alBufferData(j->buffer, j->format, j->pcm, (ALsizei) j->size, j->rate);
+        } else if (!j->cancelled) {
+            fprintf(stderr, "[audio] newSound FAILED %s\n", j->path ? j->path : "(memory)");
+        }
+        for (int i = 0; i < STSV_PENDING_PLAYS && !j->cancelled; i++) {
+            if (g_pending[i].buffer == j->buffer && g_pending[i].source != 0) {
+                if (ok) {
+                    alSourcei(g_pending[i].source, AL_BUFFER, (ALint) j->buffer);
+                    alSourcePlay(g_pending[i].source);
+                    if (g_pending[i].paused) alSourcePause(g_pending[i].source);
+                }
+                g_pending[i].source = g_pending[i].buffer = 0;
+            }
+        }
+        free(j->pcm);
+        free(j->ogg);
+        free(j->path);
+        free(j);
+    }
+}
+
+static int stsv_sound_load_sync(const void *data, int len) {
+    size_t size = 0;
+    ALenum format = 0;
+    ALsizei rate = 0;
+    char *pcm = stsv_decode_ogg((const char *) data, len, &size, &format, &rate);
+    if (pcm == NULL) {
+        return 0;
+    }
     ALuint buffer = 0;
     alGenBuffers(1, &buffer);
     alBufferData(buffer, format, pcm, (ALsizei) size, rate);
@@ -187,9 +351,70 @@ int stsv_sound_load(const void *data, int len) {
     return (int) buffer;
 }
 
+static int stsv_queue_job(stsv_job *job) {
+    alGenBuffers(1, &job->buffer);
+    pthread_mutex_lock(&g_jobs_lock);
+    job->next = g_jobs;
+    g_jobs = job;
+    pthread_cond_signal(&g_jobs_cond);
+    pthread_mutex_unlock(&g_jobs_lock);
+    return (int) job->buffer;
+}
+
+/* Queue a whole .ogg (encoded bytes at data/len) for decoding into a new AL
+ * buffer. Returns the buffer name (>0) or 0 on failure. Used for short SFX. */
+int stsv_sound_load(const void *data, int len) {
+    if (!g_ready || data == NULL || len <= 0) {
+        return 0;
+    }
+    if (len > 12 && memcmp(data, "RIFF", 4) == 0) {
+        return stsv_load_wav((const unsigned char *) data, len);
+    }
+    if (!g_async) {
+        return stsv_sound_load_sync(data, len);
+    }
+    stsv_job *job = (stsv_job *) calloc(1, sizeof *job);
+    char *copy = (char *) malloc((size_t) len);
+    if (job == NULL || copy == NULL) {
+        free(job);
+        free(copy);
+        return stsv_sound_load_sync(data, len);
+    }
+    memcpy(copy, data, (size_t) len);
+    job->ogg = copy;
+    job->len = len;
+    return stsv_queue_job(job);
+}
+
+/* Returns -1, not 0, when the caller should read the file itself. */
+int stsv_sound_load_path(const void *utf8, int len) {
+    if (!g_ready || !g_async || utf8 == NULL || len <= 0) {
+        return -1;
+    }
+    stsv_job *job = (stsv_job *) calloc(1, sizeof *job);
+    char *path = (char *) malloc((size_t) len + 1);
+    if (job == NULL || path == NULL) {
+        free(job);
+        free(path);
+        return -1;
+    }
+    memcpy(path, utf8, (size_t) len);
+    path[len] = '\0';
+    job->path = path;
+    return stsv_queue_job(job);
+}
+
 void stsv_sound_free(int buffer) {
     if (!g_ready || buffer == 0) return;
     ALuint b = (ALuint) buffer;
+    pthread_mutex_lock(&g_jobs_lock);
+    for (stsv_job *j = g_jobs; j; j = j->next) {
+        if (j->buffer == b) j->cancelled = 1;
+    }
+    pthread_mutex_unlock(&g_jobs_lock);
+    for (int i = 0; i < STSV_PENDING_PLAYS; i++) {
+        if (g_pending[i].buffer == b) g_pending[i].source = g_pending[i].buffer = 0;
+    }
     /* stop any source still bound to it, then delete */
     for (int i = 0; i < STSV_SOURCE_POOL; i++) {
         ALint bound = 0;
@@ -206,25 +431,44 @@ void stsv_sound_free(int buffer) {
  * name used as libGDX's sound id, or 0. pan is -1..1 -> x position. */
 int stsv_sound_play(int buffer, float volume, float pitch, float pan, int loop) {
     if (!g_ready || buffer == 0) return 0;
+    stsv_sound_pump();
     ALuint src = 0;
     for (int i = 0; i < STSV_SOURCE_POOL; i++) {
         ALint state = 0;
         alGetSourcei(g_sources[i], AL_SOURCE_STATE, &state);
-        if (state != AL_PLAYING && state != AL_PAUSED) { src = g_sources[i]; break; }
+        if (state != AL_PLAYING && state != AL_PAUSED && !stsv_source_reserved(g_sources[i])) {
+            src = g_sources[i];
+            break;
+        }
     }
     if (src == 0) src = g_sources[0]; /* all busy: steal the first */
+    stsv_drop_pending_source(src);
     alSourceStop(src);
-    alSourcei(src, AL_BUFFER, buffer);
+    int pending = g_async && stsv_buffer_pending((ALuint) buffer);
+    alSourcei(src, AL_BUFFER, pending ? 0 : buffer);
     alSourcef(src, AL_GAIN, volume < 0.0f ? 0.0f : (volume > 1.0f ? 1.0f : volume));
     alSourcef(src, AL_PITCH, pitch <= 0.0f ? 1.0f : pitch);
     alSource3f(src, AL_POSITION, pan, 0.0f, 0.0f);
     alSourcei(src, AL_LOOPING, loop ? AL_TRUE : AL_FALSE);
+    if (pending) {
+        for (int i = 0; i < STSV_PENDING_PLAYS; i++) {
+            if (g_pending[i].source == 0) {
+                g_pending[i].buffer = (ALuint) buffer;
+                g_pending[i].source = src;
+                g_pending[i].paused = 0;
+                return (int) src;
+            }
+        }
+        fprintf(stderr, "[audio] pending play table full, dropping a play\n");
+        return 0;
+    }
     alSourcePlay(src);
     return (int) src;
 }
 
 void stsv_sound_stop(int source) {
     if (!g_ready || source == 0) return;
+    stsv_drop_pending_source((ALuint) source);
     alSourceStop((ALuint) source);
 }
 
@@ -243,13 +487,21 @@ void stsv_sound_set_looping(int source, int loop) {
     alSourcei((ALuint) source, AL_LOOPING, loop ? AL_TRUE : AL_FALSE);
 }
 
+static void stsv_mark_pending_paused(ALuint source, int paused) {
+    for (int i = 0; i < STSV_PENDING_PLAYS; i++) {
+        if (g_pending[i].source == source) g_pending[i].paused = paused;
+    }
+}
+
 void stsv_sound_pause(int source) {
     if (!g_ready || source == 0) return;
+    stsv_mark_pending_paused((ALuint) source, 1);
     alSourcePause((ALuint) source);
 }
 
 void stsv_sound_resume(int source) {
     if (!g_ready || source == 0) return;
+    stsv_mark_pending_paused((ALuint) source, 0);
     ALint state = 0;
     alGetSourcei((ALuint) source, AL_SOURCE_STATE, &state);
     if (state == AL_PAUSED) alSourcePlay((ALuint) source);

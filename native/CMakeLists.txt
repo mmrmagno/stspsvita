@@ -43,6 +43,9 @@ add_executable(${PROJECT_NAME}
 # and the uchar.h shim; it must reach the glue too (they force-include uchar.h),
 # so define it target-wide.
 target_compile_definitions(${PROJECT_NAME} PRIVATE TEAVM_VITA=1)
+if("$ENV{STSV_BENCH}" STREQUAL "1")
+  target_compile_definitions(${PROJECT_NAME} PRIVATE STSV_BENCH=1)
+endif()
 
 # TeaVM emits its own main(); rename it so src/main.c owns process startup
 # (vitaGL + memory init must happen before the Java world boots). Scoped to the

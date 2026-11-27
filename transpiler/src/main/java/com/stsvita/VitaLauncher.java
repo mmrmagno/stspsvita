@@ -4,6 +4,8 @@ import com.badlogic.gdx.ApplicationListener;
 import com.megacrit.cardcrawl.core.CardCrawlGame;
 import com.stsvita.backend.VitaApplication;
 import com.stsvita.backend.VitaFiles;
+import com.stsvita.bench.Bench;
+import com.stsvita.gen.BuildFlags;
 
 /**
  * Vita replacement for com.megacrit.cardcrawl.desktop.DesktopLauncher.
@@ -53,6 +55,10 @@ public final class VitaLauncher {
                 }, "Name", current == null ? "" : current, "");
             }
         };
+
+        if (BuildFlags.BENCH) {
+            Bench.install();
+        }
 
         VitaApplication.Config cfg = new VitaApplication.Config();
         cfg.width = 960;

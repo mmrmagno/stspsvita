@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.GL30;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.glutils.GLVersion;
+import com.stsvita.gen.BuildFlags;
 
 /**
  * libGDX 1.9.5 Graphics for the Vita: one fixed 960x544 display, vitaGL
@@ -14,12 +15,20 @@ import com.badlogic.gdx.graphics.glutils.GLVersion;
  */
 public class VitaGraphics implements Graphics {
 
+    private static final float MAX_DELTA = 1f / 30f;
+
+    public static float substepDelta;
+    public static int substepCount;
+    public static float benchFixedDelta;
+    public static boolean benchNoSubstep;
+
     private final VitaApplication.Config config;
-    private final VitaGL20 gl20 = new VitaGL20();
+    private final VitaGL20 gl20 = BuildFlags.BENCH ? new BenchGL20() : new VitaGL20();
     private GLVersion glVersion;
     private long frameId = -1;
     private long lastFrameMicros;
     private float deltaTime;
+    private float rawDeltaTime;
     private int fps;
     private int frames;
     private long fpsWindowStart;
@@ -43,7 +52,16 @@ public class VitaGraphics implements Graphics {
 
     void beginFrame() {
         long now = VitaNatives.micros();
-        deltaTime = (now - lastFrameMicros) / 1e6f;
+        rawDeltaTime = (now - lastFrameMicros) / 1e6f;
+        if (BuildFlags.BENCH && benchFixedDelta > 0f) {
+            rawDeltaTime = benchFixedDelta;
+        }
+        deltaTime = Math.min(rawDeltaTime, MAX_DELTA);
+        substepDelta = 0f;
+        substepCount = Math.min(4, (int) Math.ceil(deltaTime * 60f - 0.25f));
+        if (BuildFlags.BENCH && benchNoSubstep) {
+            substepCount = 1;
+        }
         lastFrameMicros = now;
         frameId++;
         frames++;
@@ -103,12 +121,12 @@ public class VitaGraphics implements Graphics {
 
     @Override
     public float getDeltaTime() {
-        return deltaTime;
+        return substepDelta > 0f ? substepDelta : deltaTime;
     }
 
     @Override
     public float getRawDeltaTime() {
-        return deltaTime;
+        return rawDeltaTime;
     }
 
     @Override

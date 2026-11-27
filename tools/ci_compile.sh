@@ -9,6 +9,10 @@ trap 'rm -rf "$OUT"' EXIT
 JARS=$(find /opt/gradle-home -name '*.jar' | tr '\n' ':')
 # NewInstanceRegistry names game classes, so it needs the jar.
 find "$SRC/backend" -name '*.java' ! -name NewInstanceRegistry.java > "$OUT/sources"
+mkdir -p "$OUT/gen/com/stsvita/gen"
+printf 'package com.stsvita.gen;\npublic final class BuildFlags {\n    public static final boolean BENCH = false;\n}\n' \
+    > "$OUT/gen/com/stsvita/gen/BuildFlags.java"
+echo "$OUT/gen/com/stsvita/gen/BuildFlags.java" >> "$OUT/sources"
 javac -nowarn -encoding UTF-8 -cp "$JARS" -d "$OUT/classes" "@$OUT/sources"
 
 cd "$SRC/native/src"
