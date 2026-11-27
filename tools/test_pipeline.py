@@ -1,4 +1,5 @@
 import hashlib
+import importlib.util
 import shutil
 import struct
 import subprocess
@@ -122,6 +123,52 @@ class PipelineTest(unittest.TestCase):
         self.assertIn("images/small.png", files)
         self.assertIn("font/fixture.otf", files)
         self.assertNotIn("font/jpn/fixture.otf", files)
+
+
+def make_font(path, chars):
+    from fontTools.fontBuilder import FontBuilder
+    from fontTools.pens.ttGlyphPen import TTGlyphPen
+    names = [".notdef"] + [f"g{ord(c):04x}" for c in chars]
+    pen = TTGlyphPen(None)
+    pen.moveTo((0, 0)); pen.lineTo((0, 500)); pen.lineTo((500, 500)); pen.closePath()
+    fb = FontBuilder(1000, isTTF=True)
+    fb.setupGlyphOrder(names)
+    fb.setupCharacterMap({ord(c): f"g{ord(c):04x}" for c in chars})
+    fb.setupGlyf({n: pen.glyph() for n in names})
+    fb.setupHorizontalMetrics({n: (500, 0) for n in names})
+    fb.setupHorizontalHeader(ascent=880, descent=-120)
+    fb.setupNameTable({"familyName": "Fixture", "styleName": "Regular"})
+    fb.setupOS2()
+    fb.setupPost()
+    fb.save(str(path))
+
+
+class CjkFontSubsetTest(unittest.TestCase):
+    @unittest.skipUnless(importlib.util.find_spec("fontTools"), "needs fontTools")
+    def test_kept_cjk_fonts_hold_only_the_game_characters(self):
+        import assets
+        from fontTools.ttLib import TTFont
+        with tempfile.TemporaryDirectory() as tmp:
+            src, dst = Path(tmp) / "raw", Path(tmp) / "vita"
+            (src / "localization" / "jpn2").mkdir(parents=True)
+            (src / "localization" / "jpn").mkdir(parents=True)
+            (src / "localization" / "jpn" / "ui.json").write_text('{"a": "中"}', encoding="utf-8")
+            (src / "localization" / "jpn2" / "ui.json").write_text('{"b": "国"}', encoding="utf-8")
+            (dst / "font" / "jpn").mkdir(parents=True)
+            font = dst / "font" / "jpn" / "fixture.otf"
+            make_font(font, "Ax中国語")
+            original = font.read_bytes()
+            outputs = []
+            for _ in range(2):
+                font.write_bytes(original)
+                before, after = assets.subset_cjk_fonts(src, dst, {"jpn"})
+                self.assertLess(after, before)
+                outputs.append(font.read_bytes())
+            self.assertEqual(outputs[0], outputs[1])
+            cmap = TTFont(font).getBestCmap()
+            for kept in "Ax中国":
+                self.assertIn(ord(kept), cmap)
+            self.assertNotIn(ord("語"), cmap)
 
 
 if __name__ == "__main__":
